@@ -46,7 +46,7 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				}
 			}
 			defer f.Close()
-			testSet, err := bio.ReadCSVSet(f, features)
+			testSet, err := bio.ReadCSVSet(f, features, bio.SetGenerator(botanic.NewSet))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(4)

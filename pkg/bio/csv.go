@@ -11,14 +11,21 @@ import (
 )
 
 /*
-ReadCSVSet takes an io.Reader for a CSV stream and a slice of features
-and returns botanic.Set with the samples parsed from the reader or an error.
+SetGenerator is a function that takes a slice of samples
+and generates a set with them.
+*/
+type SetGenerator func([]botanic.Sample) botanic.Set
+
+/*
+ReadCSVSet takes an io.Reader for a CSV stream, a slice of features and a
+SetGenerator and returns botanic.Set built with the SetGenerator and the
+samples parsed from the reader or an error.
 
 The header or first row of the CSV content is expected to consist of the names
 of the features in the given slice. The rest of the rows should consist of valid
 values for the all features and/or the '?' string to indicate an undefined value.
 */
-func ReadCSVSet(reader io.Reader, features []botanic.Feature) (botanic.Set, error) {
+func ReadCSVSet(reader io.Reader, features []botanic.Feature, sg SetGenerator) (botanic.Set, error) {
 	featuresByName := featureSliceToMap(features)
 	r := csv.NewReader(reader)
 	header, err := r.Read()
@@ -44,15 +51,16 @@ func ReadCSVSet(reader io.Reader, features []botanic.Feature) (botanic.Set, erro
 		}
 		samples = append(samples, sample)
 	}
-	return botanic.NewSet(samples), nil
+	return sg(samples), nil
 }
 
 /*
-ReadCSVSetFromFilePath takes a filepath string and a slice of features, opens the file to which
-the filepath points to and uses ReadCSVSet to return a botanic.Set or an error read from it. It
-will return an error if the given filepath cannot be opened for reading.
+ReadCSVSetFromFilePath takes a filepath string, a slice of features and a SetGenerator,
+opens the file to which the filepath points to and uses ReadCSVSet to return a
+botanic.Set or an error read from it. It will return an error if the given filepath
+cannot be opened for reading.
 */
-func ReadCSVSetFromFilePath(filepath string, features []botanic.Feature) (botanic.Set, error) {
+func ReadCSVSetFromFilePath(filepath string, features []botanic.Feature, sg SetGenerator) (botanic.Set, error) {
 	var f *os.File
 	var err error
 	if filepath == "" {
@@ -64,7 +72,7 @@ func ReadCSVSetFromFilePath(filepath string, features []botanic.Feature) (botani
 		}
 	}
 	defer f.Close()
-	set, err := ReadCSVSet(f, features)
+	set, err := ReadCSVSet(f, features, sg)
 	if err != nil {
 		err = fmt.Errorf("parsing CSV file %s: %v", filepath, err)
 	}

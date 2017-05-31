@@ -12,11 +12,13 @@ import (
 )
 
 type growCmdConfig struct {
-	dataInput     string
-	metadataInput string
-	output        string
-	classFeature  string
-	pruneStrategy string
+	dataInput          string
+	metadataInput      string
+	output             string
+	classFeature       string
+	pruneStrategy      string
+	cpuIntensiveSet    bool
+	memoryIntensiveSet bool
 }
 
 func growCmd(rootConfig *rootCmdConfig) *cobra.Command {
@@ -49,7 +51,7 @@ func growCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				}
 			}
 			defer f.Close()
-			trainingSet, err := bio.ReadCSVSet(f, features)
+			trainingSet, err := bio.ReadCSVSet(f, features, config.setGenerator())
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(4)
@@ -88,6 +90,8 @@ func growCmd(rootConfig *rootCmdConfig) *cobra.Command {
 	cmd.PersistentFlags().StringVarP(&(config.output), "output", "o", "", "path to a file to which the generated tree will be written in JSON format (defaults to STDOUT)")
 	cmd.PersistentFlags().StringVarP(&(config.classFeature), "class-feature", "c", "", "name of the feature the generated tree should predict (required)")
 	cmd.PersistentFlags().StringVarP(&(config.pruneStrategy), "prune", "p", "default", "pruning strategy to apply, the following are valid: default, minimum-information-gain:[VALUE], none")
+	cmd.PersistentFlags().BoolVar(&(config.memoryIntensiveSet), "memory-intensive", false, "force the use of memory-intensive subsetting to decrease time at the cost of increasing memory use")
+	cmd.PersistentFlags().BoolVar(&(config.cpuIntensiveSet), "cpu-intensive", false, "force the use of cpu-intensive subsetting to decrease memory use at the cost of increasing time")
 	return cmd
 }
 
@@ -98,7 +102,20 @@ func (gcc *growCmdConfig) Validate() error {
 	if gcc.classFeature == "" {
 		return fmt.Errorf("required class-feature flag was not set")
 	}
+	if gcc.cpuIntensiveSet && gcc.memoryIntensiveSet {
+		return fmt.Errorf("cannot set both memory-intensive and cpu-intensive flags at the same time")
+	}
 	return nil
+}
+
+func (gcc *growCmdConfig) setGenerator() bio.SetGenerator {
+	if gcc.memoryIntensiveSet {
+		return bio.SetGenerator(botanic.NewMemoryIntensiveSet)
+	}
+	if gcc.cpuIntensiveSet {
+		return bio.SetGenerator(botanic.NewCPUIntensiveSet)
+	}
+	return bio.SetGenerator(botanic.NewSet)
 }
 
 func outputTree(outputPath string, tree *botanic.Tree) error {

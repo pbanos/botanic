@@ -5,6 +5,10 @@ import (
 	"math"
 )
 
+const (
+	sampleCountThresholdForSetImplementation = 100
+)
+
 /*
 Set represents a collection of samples.
 
@@ -27,22 +31,65 @@ type Set interface {
 	Count() int
 }
 
-type set struct {
+type memoryIntensiveSubsettingSet struct {
 	samples []Sample
 }
 
-/*
-NewSet takes a slice of samples and returns a set built with them
-*/
-func NewSet(samples []Sample) Set {
-	return &set{samples}
+type cpuIntensiveSubsettingSet struct {
+	samples  []Sample
+	criteria []FeatureCriterion
 }
 
-func (s *set) Count() int {
+/*
+NewSet takes a slice of samples and returns a set built with them.
+The set will be a CPU intensive one when the number of samples is
+over sampleCountThresholdForSetImplementation
+*/
+func NewSet(samples []Sample) Set {
+	if len(samples) > sampleCountThresholdForSetImplementation {
+		return &cpuIntensiveSubsettingSet{samples, []FeatureCriterion{}}
+	}
+	return &memoryIntensiveSubsettingSet{samples}
+}
+
+/*
+NewMemoryIntensiveSet takes a slice of samples and returns a Set
+built with them. A memory-intensive set is an implementation that
+replicates the slice of samples when subsetting to reduce
+calculations at the cost of increased memory.
+*/
+func NewMemoryIntensiveSet(samples []Sample) Set {
+	return &memoryIntensiveSubsettingSet{samples}
+}
+
+/*
+NewCPUIntensiveSet takes a slice of samples and returns a Set
+built with them. A cpu-intensive set is an implementation that
+instead of replicating the samples when subsetting, stores the
+applying feature criteria to define the subset and keeps the same
+sample slice. This can achieve a drastic reduction in memory use
+that comes at the cost of CPU time: every calculation that goes over
+the samples of the set will apply the feature criteria of the set
+on all original samples (the ones provided to this method).
+*/
+func NewCPUIntensiveSet(samples []Sample) Set {
+	return &cpuIntensiveSubsettingSet{samples, []FeatureCriterion{}}
+}
+
+func (s *memoryIntensiveSubsettingSet) Count() int {
 	return len(s.samples)
 }
 
-func (s *set) Entropy(f Feature) float64 {
+func (s *cpuIntensiveSubsettingSet) Count() int {
+	var length int
+	s.iterateOnSet(func(_ Sample) bool {
+		length++
+		return true
+	})
+	return length
+}
+
+func (s *memoryIntensiveSubsettingSet) Entropy(f Feature) float64 {
 	var result float64
 	featureValueCounts := make(map[string]float64)
 	count := 0.0
@@ -60,7 +107,26 @@ func (s *set) Entropy(f Feature) float64 {
 	return result
 }
 
-func (s *set) FeatureValues(f Feature) []interface{} {
+func (s *cpuIntensiveSubsettingSet) Entropy(f Feature) float64 {
+	var result float64
+	featureValueCounts := make(map[string]float64)
+	count := 0.0
+	s.iterateOnSet(func(sample Sample) bool {
+		if v := sample.ValueFor(f); v != nil {
+			vString := fmt.Sprintf("%v", v)
+			count += 1.0
+			featureValueCounts[vString] += 1.0
+		}
+		return true
+	})
+	for _, v := range featureValueCounts {
+		probValue := v / count
+		result -= probValue * math.Log(probValue)
+	}
+	return result
+}
+
+func (s *memoryIntensiveSubsettingSet) FeatureValues(f Feature) []interface{} {
 	result := []interface{}{}
 	encountered := make(map[string]bool)
 	for _, sample := range s.samples {
@@ -74,20 +140,71 @@ func (s *set) FeatureValues(f Feature) []interface{} {
 	return result
 }
 
-func (s *set) SubsetWith(fc FeatureCriterion) Set {
+func (s *cpuIntensiveSubsettingSet) FeatureValues(f Feature) []interface{} {
+	result := []interface{}{}
+	encountered := make(map[string]bool)
+	s.iterateOnSet(func(sample Sample) bool {
+		v := sample.ValueFor(f)
+		vString := fmt.Sprintf("%v", v)
+		if !encountered[vString] {
+			encountered[vString] = true
+			result = append(result, v)
+		}
+		return true
+	})
+	return result
+}
+
+func (s *memoryIntensiveSubsettingSet) SubsetWith(fc FeatureCriterion) Set {
 	var samples []Sample
 	for _, sample := range s.samples {
 		if fc.SatisfiedBy(sample) {
 			samples = append(samples, sample)
 		}
 	}
-	return &set{samples}
+	return &memoryIntensiveSubsettingSet{samples}
 }
 
-func (s *set) Samples() []Sample {
+func (s *cpuIntensiveSubsettingSet) SubsetWith(fc FeatureCriterion) Set {
+	criteria := []FeatureCriterion{fc}
+	criteria = append(criteria, s.criteria...)
+	return &cpuIntensiveSubsettingSet{s.samples, criteria}
+}
+
+func (s *memoryIntensiveSubsettingSet) Samples() []Sample {
 	return s.samples
 }
 
-func (s *set) String() string {
+func (s *cpuIntensiveSubsettingSet) Samples() []Sample {
+	var samples []Sample
+	s.iterateOnSet(func(sample Sample) bool {
+		samples = append(samples, sample)
+		return true
+	})
+	return samples
+}
+
+func (s *memoryIntensiveSubsettingSet) String() string {
 	return fmt.Sprintf("[ %v ]", s.Count())
+}
+
+func (s *cpuIntensiveSubsettingSet) String() string {
+	return fmt.Sprintf("[ %v ]", s.Count())
+}
+
+func (s *cpuIntensiveSubsettingSet) iterateOnSet(lambda func(Sample) bool) {
+	for _, sample := range s.samples {
+		skip := false
+		for _, criterion := range s.criteria {
+			if !criterion.SatisfiedBy(sample) {
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			if !lambda(sample) {
+				break
+			}
+		}
+	}
 }
