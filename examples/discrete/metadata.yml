@@ -1,0 +1,19 @@
+features:
+  Age:
+    - "< 18"
+    - "18 - 35"
+    - "36 - 55"
+    - "> 55"
+  Education:
+    - "high school"
+    - "bachelors"
+    - "masters"
+  Income:
+    - low
+    - high
+  Marital Status:
+    - married
+    - single
+  Class:
+    - "will buy"
+    - "won't buy"

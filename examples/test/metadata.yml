@@ -1,0 +1,23 @@
+features:
+  Más de 50 años:
+    - "Sí"
+    - "No"
+  Varón:
+    - "Sí"
+    - "No"
+  Vértigo franco:
+    - "Sí"
+    - "No"
+  Maniobra de DH positiva:
+    - "Sí"
+    - "No"
+  Cefalea:
+    - "Sí"
+    - "No"
+  Hipoacusia unilateral:
+    - "Sí"
+    - "No"
+  Diagnóstico:
+    - "VPPB"
+    - "Migraña"
+    - "Ménière"

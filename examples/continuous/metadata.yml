@@ -1,0 +1,20 @@
+features:
+  K: continuous
+  Na: continuous
+  CL: continuous
+  HCO: continuous
+  Endotoxin: continuous
+  Aniongap: continuous
+  PLA2: continuous
+  SDH: continuous
+  GLDH: continuous
+  TPP: continuous
+  Breath rate: continuous
+  PCV: continuous
+  Pulse rate: continuous
+  Fibrinogen: continuous
+  Dimer: continuous
+  FibPerDim: continuous
+  Class:
+    - "healthy."
+    - "colic."
