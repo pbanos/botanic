@@ -24,6 +24,6 @@ func cliParser() *cobra.Command {
 	}
 	config := &rootCmdConfig{}
 	rootCmd.PersistentFlags().BoolVarP(&(config.verbose), "verbose", "v", false, "")
-	rootCmd.AddCommand(versionCmd(), growCmd(config), testCmd(config))
+	rootCmd.AddCommand(versionCmd(), growCmd(config), testCmd(config), predictCmd(config))
 	return rootCmd
 }
