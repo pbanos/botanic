@@ -94,11 +94,11 @@ Predict takes a sample and returns a prediction according to the tree and an
 error if the prediction could not be made.
 */
 func (t *Tree) Predict(s Sample) (*Prediction, error) {
-	if len(t.subtrees) == 0 {
+	if t.subtreeFeature == nil {
 		if t.prediction != nil {
 			return t.prediction, nil
 		}
-		return nil, nil
+		return nil, fmt.Errorf("no prediction available for this kind of sample")
 	}
 	if t.undefinedSubtree != nil && s.ValueFor(t.subtreeFeature) == nil {
 		return t.undefinedSubtree.Predict(s)
@@ -121,7 +121,7 @@ func (t *Tree) Predict(s Sample) (*Prediction, error) {
 		}
 	}
 	if prediction == nil {
-		return nil, fmt.Errorf("sample does not satisfy any subtree criteria on feature %v", t.subtreeFeature)
+		return nil, fmt.Errorf("sample does not satisfy any subtree criteria on feature %s", t.subtreeFeature.Name())
 	}
 	return prediction, nil
 }
@@ -144,8 +144,11 @@ func joinPredictions(p1 *Prediction, p2 *Prediction) (*Prediction, error) {
 }
 
 func newPredictionFromSet(s Set, f Feature) (*Prediction, error) {
-	probs := make(map[string]float64)
 	weight := s.Count()
+	if weight == 0 {
+		return nil, fmt.Errorf("cannot make prediction for empty set")
+	}
+	probs := make(map[string]float64)
 	count := 0.0
 	for _, sample := range s.Samples() {
 		if v := sample.ValueFor(f); v != nil {
@@ -266,7 +269,9 @@ func (t *Tree) UnmarshalJSON(b []byte) error {
 	}
 	t.subtrees = jt.Subtrees
 	t.undefinedSubtree = jt.UndefinedSubtree
-	t.subtreeFeature = &UndefinedFeature{jt.SubtreeFeature}
+	if jt.SubtreeFeature != "" {
+		t.subtreeFeature = &UndefinedFeature{jt.SubtreeFeature}
+	}
 	t.prediction = jt.Prediction
 	return nil
 }
