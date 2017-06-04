@@ -79,6 +79,40 @@ func ReadCSVSetFromFilePath(filepath string, features []botanic.Feature, sg SetG
 	return set, err
 }
 
+/*
+WriteCSVSet takes a writer, a botanic.Set and a slice of features and
+dumps to the writer the set in CSV format, specifying only the features
+in the given slice for the samples. It returns an error if something
+went wrong when wrting to the writer, or codifying the samples.
+*/
+func WriteCSVSet(writer io.Writer, s botanic.Set, features []botanic.Feature) error {
+	w := csv.NewWriter(writer)
+	record := make([]string, len(features))
+	for i, f := range features {
+		record[i] = f.Name()
+	}
+	err := w.Write(record)
+	if err != nil {
+		return fmt.Errorf("writing CSV header: %v", err)
+	}
+	for i, sample := range s.Samples() {
+		for j, f := range features {
+			v := sample.ValueFor(f)
+			if v == nil {
+				record[j] = "?"
+			} else {
+				record[j] = fmt.Sprintf("%v", v)
+			}
+		}
+		err = w.Write(record)
+		if err != nil {
+			return fmt.Errorf("writing CSV row for sample %d: %v", i, err)
+		}
+	}
+	w.Flush()
+	return w.Error()
+}
+
 func parseFeaturesFromCSVHeader(header []string, features map[string]botanic.Feature) ([]botanic.Feature, error) {
 	featureOrder := []botanic.Feature{}
 	for i, name := range header {
