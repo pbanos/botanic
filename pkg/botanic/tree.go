@@ -171,9 +171,6 @@ func (t *Tree) String() string {
 	if t.prediction != nil {
 		result = fmt.Sprintf("%s{ %v }\n", result, t.prediction)
 	}
-	if t.set != nil {
-		result = fmt.Sprintf("%s[ %v ]\n", result, t.set.Count())
-	}
 	if t.informationGain != 0.0 {
 		result = fmt.Sprintf("%s{ informationGain=%f }\n", result, t.informationGain)
 	}

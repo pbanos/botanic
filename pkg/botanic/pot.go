@@ -53,6 +53,7 @@ func (p *pot) develop(t *Tree, features []Feature) {
 	t.informationGain = partition.informationGain
 	t.subtrees = partition.subtrees
 	t.undefinedSubtree = NewTreeForUndefinedFeatureCriterion(partition.feature, t.set)
+	t.set = nil
 	features[featureIndex], features[0] = features[0], features[featureIndex]
 	var wg sync.WaitGroup
 	wg.Add(len(t.subtrees) + 1)
