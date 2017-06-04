@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -8,6 +9,14 @@ import (
 
 type rootCmdConfig struct {
 	verbose bool
+}
+
+func (rcc *rootCmdConfig) Logf(format string, a ...interface{}) {
+	if !rcc.verbose {
+		return
+	}
+	fmt.Fprintf(os.Stderr, format, a...)
+	fmt.Fprintln(os.Stderr, "")
 }
 
 func main() {

@@ -33,7 +33,6 @@ func growCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			l := logger(rootConfig.verbose)
 			features, err := bio.ReadYMLFeaturesFromFile(config.metadataInput)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -74,10 +73,10 @@ func growCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				os.Exit(6)
 			}
 			p := botanic.New(features[0:len(features)-1], classFeature, pruner)
-			l.Logf("Growing tree from a set with %d samples and %d features to predict %s ...", trainingSet.Count(), len(features)-1, classFeature.Name())
+			rootConfig.Logf("Growing tree from a set with %d samples and %d features to predict %s ...", trainingSet.Count(), len(features)-1, classFeature.Name())
 			t := p.Grow(trainingSet)
-			l.Logf("Done")
-			l.Logf("%v", t)
+			rootConfig.Logf("Done")
+			rootConfig.Logf("%v", t)
 			err = outputTree(config.output, t)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)

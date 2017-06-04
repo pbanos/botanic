@@ -28,7 +28,6 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			l := logger(rootConfig.verbose)
 			features, err := bio.ReadYMLFeaturesFromFile(config.metadataInput)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -68,9 +67,9 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(4)
 			}
-			l.Logf("Testing tree against testset with %d samples...", testSet.Count())
+			rootConfig.Logf("Testing tree against testset with %d samples...", testSet.Count())
 			successRate, errorCount := tree.Test(testSet, classFeature)
-			l.Logf("Done")
+			rootConfig.Logf("Done")
 			fmt.Printf("%f success rate, %d errors\n", successRate, errorCount)
 		},
 	}

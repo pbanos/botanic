@@ -32,7 +32,6 @@ func setCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			l := logger(rootConfig.verbose)
 			features, err := bio.ReadYMLFeaturesFromFile(config.metadataInput)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -55,16 +54,16 @@ func setCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(4)
 			}
-			l.Logf("Loaded set with %d samples...", inputSet.Count())
+			rootConfig.Logf("Loaded set with %d samples...", inputSet.Count())
 			var outputSet, splittedSet botanic.Set
 			if config.splitPercent != 0 {
-				l.Logf("Splitting set into sets with %d%% and %d%% samples", 100-config.splitPercent, config.splitPercent)
+				rootConfig.Logf("Splitting set into sets with %d%% and %d%% samples", 100-config.splitPercent, config.splitPercent)
 				outputSet, splittedSet = splitSet(inputSet, config.splitPercent, bio.SetGenerator(botanic.NewSet))
-				l.Logf("Generated sets with %d and %d samples respectively", outputSet.Count(), splittedSet.Count())
+				rootConfig.Logf("Generated sets with %d and %d samples respectively", outputSet.Count(), splittedSet.Count())
 			} else {
 				outputSet = inputSet
 			}
-			l.Logf("Dumping output set...")
+			rootConfig.Logf("Dumping output set...")
 			var outputFile *os.File
 			if config.setOutput != "" {
 				outputFile, err = os.Create(config.setOutput)
@@ -82,7 +81,7 @@ func setCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				os.Exit(6)
 			}
 			if splittedSet != nil && config.splitOutput != "" {
-				l.Logf("Dumping split set...")
+				rootConfig.Logf("Dumping split set...")
 				splitOutputFile, err := os.Create(config.splitOutput)
 				if err != nil {
 					fmt.Fprintln(os.Stderr, err)
