@@ -11,10 +11,24 @@ import (
 )
 
 /*
+ */
+type CSVWriter interface {
+	Write(botanic.Sample) error
+	Count() int
+	Flush() error
+}
+
+/*
 SetGenerator is a function that takes a slice of samples
 and generates a set with them.
 */
 type SetGenerator func([]botanic.Sample) botanic.Set
+
+type csvWriter struct {
+	count    int
+	features []botanic.Feature
+	w        *csv.Writer
+}
 
 /*
 ReadCSVSet takes an io.Reader for a CSV stream, a slice of features and a
@@ -26,32 +40,61 @@ of the features in the given slice. The rest of the rows should consist of valid
 values for the all features and/or the '?' string to indicate an undefined value.
 */
 func ReadCSVSet(reader io.Reader, features []botanic.Feature, sg SetGenerator) (botanic.Set, error) {
+	samples := []botanic.Sample{}
+	err := ReadCSVSetBySample(reader, features, func(_ int, s botanic.Sample) (bool, error) {
+		samples = append(samples, s)
+		return true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return sg(samples), nil
+}
+
+/*
+ReadCSVSetBySample takes an io.Reader for a CSV stream, a slice of features and a
+lambda function on an integer and a botanic.Sample that returns a boolean value.
+It parses the samples from the reader and for each it calls the lambda function
+with the sample and its index as parameters. If the lambda function returns true,
+it will continue processing the next sample, otherwise it will stop. An error is
+returned if something goes wrong when reading the file or parsing a sample.
+
+The header or first row of the CSV content is expected to consist of the names
+of the features in the given slice. The rest of the rows should consist of valid
+values for the all features and/or the '?' string to indicate an undefined value.
+*/
+func ReadCSVSetBySample(reader io.Reader, features []botanic.Feature, lambda func(int, botanic.Sample) (bool, error)) error {
 	featuresByName := featureSliceToMap(features)
 	r := csv.NewReader(reader)
 	header, err := r.Read()
 	if err != nil {
-		return nil, fmt.Errorf("reading header: %v", err)
+		return fmt.Errorf("reading header: %v", err)
 	}
 	features, err = parseFeaturesFromCSVHeader(header, featuresByName)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	samples := []botanic.Sample{}
 	for l := 2; ; l++ {
 		row, err := r.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("reading body: %v", err)
+			return fmt.Errorf("reading body: %v", err)
 		}
 		sample, err := parseSampleFromCSVRow(row, features)
 		if err != nil {
-			return nil, fmt.Errorf("parsing line %d from %v: %v", l, reader, err)
+			return fmt.Errorf("parsing line %d from %v: %v", l, reader, err)
 		}
-		samples = append(samples, sample)
+		ok, err := lambda(l-2, sample)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
 	}
-	return sg(samples), nil
+	return nil
 }
 
 /*
@@ -80,12 +123,43 @@ func ReadCSVSetFromFilePath(filepath string, features []botanic.Feature, sg SetG
 }
 
 /*
-WriteCSVSet takes a writer, a botanic.Set and a slice of features and
-dumps to the writer the set in CSV format, specifying only the features
-in the given slice for the samples. It returns an error if something
-went wrong when wrting to the writer, or codifying the samples.
+ReadCSVSetBySampleFromFilePath takes an filepath string for a CSV stream, a
+slice of features and a lambda function on an integer and a botanic.Sample
+that returns a boolean value. It opens the file for reading (if the filapath
+is "" os.Stdin is used instead), parses the samples from the reader and for
+each it calls the lambda function with the sample and its index as parameters.
+If the lambda function returns true, it will continue processing the next
+sample, otherwise it will stop. An error is returned if something goes wrong
+when reading the file or parsing a sample.
+
+The header or first row of the CSV content is expected to consist of the names
+of the features in the given slice. The rest of the rows should consist of valid
+values for the all features and/or the '?' string to indicate an undefined value.
 */
-func WriteCSVSet(writer io.Writer, s botanic.Set, features []botanic.Feature) error {
+func ReadCSVSetBySampleFromFilePath(filepath string, features []botanic.Feature, lambda func(int, botanic.Sample) (bool, error)) error {
+	var f *os.File
+	var err error
+	if filepath == "" {
+		f = os.Stdin
+	} else {
+		f, err = os.Open(filepath)
+		if err != nil {
+			return fmt.Errorf("reading training set: %v", err)
+		}
+	}
+	defer f.Close()
+	err = ReadCSVSetBySample(f, features, lambda)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+/*
+NewCSVWriter takes an io.Writer and a slice of botanic.Features and
+returns a CSVWriter that will write any samples on the io.Writer.
+*/
+func NewCSVWriter(writer io.Writer, features []botanic.Feature) (CSVWriter, error) {
 	w := csv.NewWriter(writer)
 	record := make([]string, len(features))
 	for i, f := range features {
@@ -93,24 +167,29 @@ func WriteCSVSet(writer io.Writer, s botanic.Set, features []botanic.Feature) er
 	}
 	err := w.Write(record)
 	if err != nil {
-		return fmt.Errorf("writing CSV header: %v", err)
+		return nil, fmt.Errorf("writing CSV header: %v", err)
 	}
-	for i, sample := range s.Samples() {
-		for j, f := range features {
-			v := sample.ValueFor(f)
-			if v == nil {
-				record[j] = "?"
-			} else {
-				record[j] = fmt.Sprintf("%v", v)
-			}
-		}
-		err = w.Write(record)
+	return &csvWriter{features: features, w: w}, nil
+}
+
+/*
+WriteCSVSet takes a writer, a botanic.Set and a slice of features and
+dumps to the writer the set in CSV format, specifying only the features
+in the given slice for the samples. It returns an error if something
+went wrong when wrting to the writer, or codifying the samples.
+*/
+func WriteCSVSet(writer io.Writer, s botanic.Set, features []botanic.Feature) error {
+	cw, err := NewCSVWriter(writer, features)
+	if err != nil {
+		return err
+	}
+	for _, sample := range s.Samples() {
+		err = cw.Write(sample)
 		if err != nil {
-			return fmt.Errorf("writing CSV row for sample %d: %v", i, err)
+			return err
 		}
 	}
-	w.Flush()
-	return w.Error()
+	return cw.Flush()
 }
 
 func parseFeaturesFromCSVHeader(header []string, features map[string]botanic.Feature) ([]botanic.Feature, error) {
@@ -151,6 +230,33 @@ func parseSampleFromCSVRow(row []string, featureOrder []botanic.Feature) (botani
 		featureValues[feature.Name()] = value
 	}
 	return botanic.NewSample(featureValues), nil
+}
+
+func (cw *csvWriter) Count() int {
+	return cw.count
+}
+
+func (cw *csvWriter) Write(sample botanic.Sample) error {
+	record := make([]string, len(cw.features))
+	for j, f := range cw.features {
+		v := sample.ValueFor(f)
+		if v == nil {
+			record[j] = "?"
+		} else {
+			record[j] = fmt.Sprintf("%v", v)
+		}
+	}
+	err := cw.w.Write(record)
+	if err != nil {
+		return fmt.Errorf("writing CSV row for sample %d: %v", cw.count+1, err)
+	}
+	cw.count++
+	return nil
+}
+
+func (cw *csvWriter) Flush() error {
+	cw.w.Flush()
+	return cw.w.Error()
 }
 
 func featureSliceToMap(features []botanic.Feature) map[string]botanic.Feature {
