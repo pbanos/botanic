@@ -126,12 +126,12 @@ func (cfc *continuousFeatureCriterion) Interval() (float64, float64) {
 
 func (cfc *continuousFeatureCriterion) String() string {
 	if math.IsInf(cfc.a, 0) {
-		return fmt.Sprintf("%v < %f", cfc.feature, cfc.b)
+		return fmt.Sprintf("%s < %f", cfc.feature.Name(), cfc.b)
 	}
 	if math.IsInf(cfc.b, 0) {
-		return fmt.Sprintf("%f <= %v", cfc.a, cfc.feature)
+		return fmt.Sprintf("%f <= %s", cfc.a, cfc.feature.Name())
 	}
-	return fmt.Sprintf("%f <= %v < %f", cfc.a, cfc.feature, cfc.b)
+	return fmt.Sprintf("%f <= %s < %f", cfc.a, cfc.feature.Name(), cfc.b)
 }
 
 func (cfc *continuousFeatureCriterion) MarshalJSON() ([]byte, error) {
@@ -173,7 +173,7 @@ func (dfc *discreteFeatureCriterion) Value() string {
 }
 
 func (dfc *discreteFeatureCriterion) String() string {
-	return fmt.Sprintf("%v is %s", dfc.feature, dfc.value)
+	return fmt.Sprintf("%s is %s", dfc.feature.Name(), dfc.value)
 }
 
 func (dfc *discreteFeatureCriterion) MarshalJSON() ([]byte, error) {
@@ -193,7 +193,7 @@ func (u *undefinedFeatureCriterion) SatisfiedBy(sample Sample) bool {
 }
 
 func (u *undefinedFeatureCriterion) String() string {
-	return fmt.Sprintf("%v not defined", u.feature)
+	return fmt.Sprintf("%s not defined", u.feature.Name())
 }
 
 func (u *undefinedFeatureCriterion) MarshalJSON() ([]byte, error) {

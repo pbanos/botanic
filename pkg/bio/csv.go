@@ -13,7 +13,7 @@ import (
 /*
  */
 type CSVWriter interface {
-	Write(botanic.Sample) error
+	Write([]botanic.Sample) (int, error)
 	Count() int
 	Flush() error
 }
@@ -183,11 +183,9 @@ func WriteCSVSet(writer io.Writer, s botanic.Set, features []botanic.Feature) er
 	if err != nil {
 		return err
 	}
-	for _, sample := range s.Samples() {
-		err = cw.Write(sample)
-		if err != nil {
-			return err
-		}
+	_, err = cw.Write(s.Samples())
+	if err != nil {
+		return err
 	}
 	return cw.Flush()
 }
@@ -236,7 +234,19 @@ func (cw *csvWriter) Count() int {
 	return cw.count
 }
 
-func (cw *csvWriter) Write(sample botanic.Sample) error {
+func (cw *csvWriter) Write(samples []botanic.Sample) (int, error) {
+	n := 0
+	var err error
+	for ; n < len(samples); n++ {
+		err = cw.WriteSample(samples[n])
+		if err != nil {
+			return n, err
+		}
+	}
+	return len(samples), nil
+}
+
+func (cw *csvWriter) WriteSample(sample botanic.Sample) error {
 	record := make([]string, len(cw.features))
 	for j, f := range cw.features {
 		v := sample.ValueFor(f)
