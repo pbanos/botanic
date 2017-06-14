@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pbanos/botanic/pkg/bio"
+	"github.com/pbanos/botanic/pkg/bio/sql"
+	"github.com/pbanos/botanic/pkg/bio/sql/sqlite3adapter"
 	"github.com/pbanos/botanic/pkg/botanic"
 	"github.com/spf13/cobra"
 )
@@ -105,12 +108,15 @@ func splitCmd(setConfig *setCmdConfig) *cobra.Command {
 		},
 	}
 	cmd.PersistentFlags().IntVarP(&(config.splitProbability), "split-probability", "p", 20, "probability as percent integer that a sample of the set will be assigned to the split set")
-	cmd.PersistentFlags().StringVarP(&(config.splitOutput), "split-output", "s", "", "path to a file to dump the output of the split set (required)")
+	cmd.PersistentFlags().StringVarP(&(config.splitOutput), "split-output", "s", "", "path to a CSV (.csv) or SQLite3 (.db) file to dump the output of the split set (required)")
 	return cmd
 }
 
 func (scc *splitCmdConfig) SplitOutputWriter(features []botanic.Feature) (writableSet, error) {
 	var splitOutputFile *os.File
+	if strings.HasSuffix(scc.splitOutput, ".db") {
+		return scc.Sqlite3SplitOutputWriter(features)
+	}
 	scc.Logf("Creating %s to dump split set...", scc.splitOutput)
 	splitOutputFile, err := os.Create(scc.splitOutput)
 	if err != nil {
@@ -132,4 +138,18 @@ func (scc *splitCmdConfig) Validate() error {
 		return fmt.Errorf("split-percent flag was set to an invalid value: it must be set to an integer between 1 and 100")
 	}
 	return nil
+}
+
+func (scc *splitCmdConfig) Sqlite3SplitOutputWriter(features []botanic.Feature) (writableSet, error) {
+	scc.Logf("Creating SQLite3 adapter for file %s to dump split set...", scc.splitOutput)
+	adapter, err := sqlite3adapter.New(scc.splitOutput)
+	if err != nil {
+		return nil, err
+	}
+	scc.Logf("Opening set over SQLite3 adapter for file %s to dump split set...", scc.splitOutput)
+	set, err := sql.CreateSet(adapter, features)
+	if err != nil {
+		return nil, err
+	}
+	return &flushableSampleWriter{set}, nil
 }

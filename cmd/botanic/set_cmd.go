@@ -3,8 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pbanos/botanic/pkg/bio"
+	"github.com/pbanos/botanic/pkg/bio/sql"
+	"github.com/pbanos/botanic/pkg/bio/sql/sqlite3adapter"
 	"github.com/pbanos/botanic/pkg/botanic"
 	"github.com/spf13/cobra"
 )
@@ -16,9 +19,17 @@ type setCmdConfig struct {
 	setOutput     string
 }
 
-type writableSet interface {
+type sampleWriter interface {
 	Write([]botanic.Sample) (int, error)
+}
+
+type writableSet interface {
+	sampleWriter
 	Flush() error
+}
+
+type flushableSampleWriter struct {
+	sampleWriter
 }
 
 func setCmd(rootConfig *rootCmdConfig) *cobra.Command {
@@ -80,9 +91,9 @@ func setCmd(rootConfig *rootCmdConfig) *cobra.Command {
 			config.Logf("Done")
 		},
 	}
-	cmd.PersistentFlags().StringVarP(&(config.setInput), "input", "i", "", "path to an input CSV file with data to use to grow the tree (defaults to STDIN)")
+	cmd.PersistentFlags().StringVarP(&(config.setInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file with data to use to grow the tree (defaults to STDIN)")
 	cmd.PersistentFlags().StringVarP(&(config.metadataInput), "metadata", "m", "", "path to a YML file with metadata describing the different features available available on the input file (required)")
-	cmd.PersistentFlags().StringVarP(&(config.setOutput), "output", "o", "", "path to a file to dump the output set (defaults to STDOUT)")
+	cmd.PersistentFlags().StringVarP(&(config.setOutput), "output", "o", "", "path to a CSV (.csv) or SQLite3 (.db) file to dump the output set (defaults to STDOUT)")
 	cmd.AddCommand(splitCmd(config))
 	return cmd
 }
@@ -98,6 +109,9 @@ func (scc *setCmdConfig) OutputWriter(features []botanic.Feature) (writableSet, 
 	var outputFile *os.File
 	var err error
 	if scc.setOutput != "" {
+		if strings.HasSuffix(scc.setOutput, ".db") {
+			return scc.Sqlite3OutputWriter(features)
+		}
 		scc.Logf("Creating %s to dump output set...", scc.setOutput)
 		outputFile, err = os.Create(scc.setOutput)
 		if err != nil {
@@ -121,6 +135,9 @@ func (scc *setCmdConfig) InputStream(done <-chan struct{}, features []botanic.Fe
 		scc.Logf("Reading input set from STDIN and dumping it into output set...")
 		f = os.Stdin
 	} else {
+		if strings.HasSuffix(scc.setInput, ".db") {
+			return scc.Sqlite3InputStream(done, features)
+		}
 		scc.Logf("Opening %s to read input set...", scc.setInput)
 		var err error
 		f, err = os.Open(scc.setInput)
@@ -153,4 +170,37 @@ func (scc *setCmdConfig) InputStream(done <-chan struct{}, features []botanic.Fe
 		close(sampleStream)
 	}()
 	return sampleStream, errStream, nil
+}
+
+func (scc *setCmdConfig) Sqlite3InputStream(done <-chan struct{}, features []botanic.Feature) (<-chan botanic.Sample, <-chan error, error) {
+	scc.Logf("Creating SQLite3 adapter for file %s to read input set...", scc.setInput)
+	adapter, err := sqlite3adapter.New(scc.setInput)
+	if err != nil {
+		return nil, nil, err
+	}
+	scc.Logf("Opening set over SQLite3 adapter for file %s to read input set...", scc.setInput)
+	set, err := sql.OpenSet(adapter, features)
+	if err != nil {
+		return nil, nil, err
+	}
+	sampleStream, errStream := set.Read(done)
+	return sampleStream, errStream, nil
+}
+
+func (scc *setCmdConfig) Sqlite3OutputWriter(features []botanic.Feature) (writableSet, error) {
+	scc.Logf("Creating SQLite3 adapter for file %s to dump output set...", scc.setOutput)
+	adapter, err := sqlite3adapter.New(scc.setOutput)
+	if err != nil {
+		return nil, err
+	}
+	scc.Logf("Opening set over SQLite3 adapter for file %s to dump output set...", scc.setOutput)
+	set, err := sql.CreateSet(adapter, features)
+	if err != nil {
+		return nil, err
+	}
+	return &flushableSampleWriter{set}, nil
+}
+
+func (fsw *flushableSampleWriter) Flush() error {
+	return nil
 }
