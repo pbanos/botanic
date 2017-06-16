@@ -452,6 +452,7 @@ func (a *adapter) CountSampleDiscreteFeatureValues(fc string, criteria []*biosql
 		whereClause, whereValues = buildWhereClause(criteria)
 		queryBuffer.WriteString(whereClause)
 	}
+	queryBuffer.WriteString(fmt.Sprintf(` GROUP BY "%s"`, fc))
 	rows, err := a.db.Query(queryBuffer.String(), whereValues...)
 	if err != nil {
 		return nil, err
@@ -485,6 +486,7 @@ func (a *adapter) CountSampleContinuousFeatureValues(fc string, criteria []*bios
 		whereClause, whereValues = buildWhereClause(criteria)
 		queryBuffer.WriteString(whereClause)
 	}
+	queryBuffer.WriteString(fmt.Sprintf(` GROUP BY "%s"`, fc))
 	rows, err := a.db.Query(queryBuffer.String(), whereValues...)
 	if err != nil {
 		return nil, err
@@ -514,7 +516,7 @@ func buildWhereClause(criteria []*biosql.FeatureCriterion) (string, []interface{
 		return "", nil
 	}
 	var buf bytes.Buffer
-	values := make([]interface{}, len(criteria))
+	values := make([]interface{}, 0, len(criteria))
 	buf.WriteString(" WHERE ")
 	buf.WriteString(fmt.Sprintf(`"%s" %s ?`, criteria[0].FeatureColumn, criteria[0].Operator))
 	values = append(values, criteria[0].Value)

@@ -150,7 +150,7 @@ func (ss *sqlSet) Samples() []botanic.Sample {
 	if err != nil {
 		panic(err)
 	}
-	samples := make([]botanic.Sample, len(rawSamples))
+	samples := make([]botanic.Sample, 0, len(rawSamples))
 	for _, s := range rawSamples {
 		samples = append(samples, &Sample{Values: s, DiscreteFeatureValues: ss.discreteValues, FeatureNamesColumns: ss.featureNamesColumns})
 	}
