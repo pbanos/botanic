@@ -142,7 +142,7 @@ func (scc *splitCmdConfig) Validate() error {
 
 func (scc *splitCmdConfig) Sqlite3SplitOutputWriter(features []botanic.Feature) (writableSet, error) {
 	scc.Logf("Creating SQLite3 adapter for file %s to dump split set...", scc.splitOutput)
-	adapter, err := sqlite3adapter.New(scc.splitOutput)
+	adapter, err := sqlite3adapter.New(scc.splitOutput, 0)
 	if err != nil {
 		return nil, err
 	}

@@ -3,13 +3,17 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pbanos/botanic/pkg/bio"
+	"github.com/pbanos/botanic/pkg/bio/sql"
+	"github.com/pbanos/botanic/pkg/bio/sql/sqlite3adapter"
 	"github.com/pbanos/botanic/pkg/botanic"
 	"github.com/spf13/cobra"
 )
 
 type testCmdConfig struct {
+	*rootCmdConfig
 	treeInput     string
 	dataInput     string
 	metadataInput string
@@ -17,7 +21,7 @@ type testCmdConfig struct {
 }
 
 func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
-	config := &testCmdConfig{}
+	config := &testCmdConfig{rootCmdConfig: rootConfig}
 	cmd := &cobra.Command{
 		Use:   "test",
 		Short: "Test the performance of a tree",
@@ -33,23 +37,13 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(2)
 			}
-			var f *os.File
-			if config.dataInput == "" {
-				f = os.Stdin
-			} else {
-				f, err = os.Open(config.dataInput)
-				if err != nil {
-					err = fmt.Errorf("reading training set from %s: %v", config.dataInput, err)
-					fmt.Fprintln(os.Stderr, err)
-					os.Exit(3)
-				}
-			}
-			defer f.Close()
-			testSet, err := bio.ReadCSVSet(f, features, bio.SetGenerator(botanic.NewSet))
+
+			testingSet, err := config.testingSet(features)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(4)
 			}
+
 			var classFeature botanic.Feature
 			for i, f := range features {
 				if f.Name() == config.classFeature {
@@ -67,13 +61,13 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(4)
 			}
-			rootConfig.Logf("Testing tree against testset with %d samples...", testSet.Count())
-			successRate, errorCount := tree.Test(testSet, classFeature)
+			rootConfig.Logf("Testing tree against testset with %d samples...", testingSet.Count())
+			successRate, errorCount := tree.Test(testingSet, classFeature)
 			rootConfig.Logf("Done")
-			fmt.Printf("%f success rate, %d errors\n", successRate, errorCount)
+			fmt.Printf("%f success rate, failed to make a prediction for %d samples\n", successRate, errorCount)
 		},
 	}
-	cmd.PersistentFlags().StringVarP(&(config.dataInput), "input", "i", "", "path to an input CSV file with data to use to grow the tree (defaults to STDIN)")
+	cmd.PersistentFlags().StringVarP(&(config.dataInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
 	cmd.PersistentFlags().StringVarP(&(config.metadataInput), "metadata", "m", "", "path to a YML file with metadata describing the different features available available on the input file (required)")
 	cmd.PersistentFlags().StringVarP(&(config.treeInput), "tree", "t", "", "path to a file from which the tree to test will be read and parsed as JSON (required)")
 	cmd.PersistentFlags().StringVarP(&(config.classFeature), "class-feature", "c", "", "name of the feature the generated tree should predict (required)")
@@ -91,6 +85,41 @@ func (tcc *testCmdConfig) Validate() error {
 		return fmt.Errorf("required class-feature flag was not set")
 	}
 	return nil
+}
+
+func (tcc *testCmdConfig) testingSet(features []botanic.Feature) (botanic.Set, error) {
+	var f *os.File
+	if tcc.dataInput == "" {
+		tcc.Logf("Reading testing set from STDIN...")
+		f = os.Stdin
+	} else {
+		if strings.HasSuffix(tcc.dataInput, ".db") {
+			return tcc.Sqlite3TestingSet(features)
+		}
+		tcc.Logf("Opening %s to read testing set...", tcc.dataInput)
+		var err error
+		f, err = os.Open(tcc.dataInput)
+		if err != nil {
+			err = fmt.Errorf("opening testing set at %s: %v", tcc.dataInput, err)
+			return nil, err
+		}
+		defer f.Close()
+	}
+	testingSet, err := bio.ReadCSVSet(f, features, botanic.NewSet)
+	if err != nil {
+		return nil, fmt.Errorf("reading testing set: %v", err)
+	}
+	return testingSet, nil
+}
+
+func (tcc *testCmdConfig) Sqlite3TestingSet(features []botanic.Feature) (botanic.Set, error) {
+	tcc.Logf("Creating SQLite3 adapter for file %s to read testing set...", tcc.dataInput)
+	adapter, err := sqlite3adapter.New(tcc.dataInput, 0)
+	if err != nil {
+		return nil, err
+	}
+	tcc.Logf("Opening set over SQLite3 adapter for file %s to read testing set...", tcc.dataInput)
+	return sql.OpenSet(adapter, features)
 }
 
 func loadTree(filepath string) (*botanic.Tree, error) {

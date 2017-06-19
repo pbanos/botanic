@@ -91,9 +91,9 @@ func setCmd(rootConfig *rootCmdConfig) *cobra.Command {
 			config.Logf("Done")
 		},
 	}
-	cmd.PersistentFlags().StringVarP(&(config.setInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file with data to use to grow the tree (defaults to STDIN)")
+	cmd.PersistentFlags().StringVarP(&(config.setInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
 	cmd.PersistentFlags().StringVarP(&(config.metadataInput), "metadata", "m", "", "path to a YML file with metadata describing the different features available available on the input file (required)")
-	cmd.PersistentFlags().StringVarP(&(config.setOutput), "output", "o", "", "path to a CSV (.csv) or SQLite3 (.db) file to dump the output set (defaults to STDOUT)")
+	cmd.PersistentFlags().StringVarP(&(config.setOutput), "output", "o", "", "path to a CSV (.csv) or SQLite3 (.db) file to dump the output set (defaults to STDOUT in CSV)")
 	cmd.AddCommand(splitCmd(config))
 	return cmd
 }
@@ -174,7 +174,7 @@ func (scc *setCmdConfig) InputStream(done <-chan struct{}, features []botanic.Fe
 
 func (scc *setCmdConfig) Sqlite3InputStream(done <-chan struct{}, features []botanic.Feature) (<-chan botanic.Sample, <-chan error, error) {
 	scc.Logf("Creating SQLite3 adapter for file %s to read input set...", scc.setInput)
-	adapter, err := sqlite3adapter.New(scc.setInput)
+	adapter, err := sqlite3adapter.New(scc.setInput, 0)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -189,7 +189,7 @@ func (scc *setCmdConfig) Sqlite3InputStream(done <-chan struct{}, features []bot
 
 func (scc *setCmdConfig) Sqlite3OutputWriter(features []botanic.Feature) (writableSet, error) {
 	scc.Logf("Creating SQLite3 adapter for file %s to dump output set...", scc.setOutput)
-	adapter, err := sqlite3adapter.New(scc.setOutput)
+	adapter, err := sqlite3adapter.New(scc.setOutput, 0)
 	if err != nil {
 		return nil, err
 	}

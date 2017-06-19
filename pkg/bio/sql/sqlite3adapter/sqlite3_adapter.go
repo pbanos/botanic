@@ -36,14 +36,20 @@ type adapter struct {
 }
 
 /*
-New takes a path to an SQLite3 database file and returns an Adapter that works
-on the file's database or an error if it fails to open as an sqlite3 database.
+New takes a path to an SQLite3 database file and a maxConn integer and returns
+an Adapter that works on the file's database or an error if it fails to open as
+an sqlite3 database.
+If the given maxConn is greater than 0, it will be the maximum concurrent
+connections to the database that will be used.
+This limit is useful when the OS limits the number of files a process
+can open, which is the case for Mac OS X.
 */
-func New(path string) (biosql.Adapter, error) {
+func New(path string, maxConn int) (biosql.Adapter, error) {
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, err
 	}
+	db.SetMaxOpenConns(maxConn)
 	return &adapter{db}, nil
 }
 
@@ -135,6 +141,7 @@ func (a *adapter) AddDiscreteValues(values []string) (int, error) {
 	chunkEnd = len(values)
 	lastValues := values[chunkStart:chunkEnd]
 	if len(lastValues) > 0 {
+		insertStmtBuffer = bytes.Buffer{}
 		insertStmtBuffer.WriteString(insertStmtStart)
 		for i := 1; i < len(lastValues); i++ {
 			insertStmtBuffer.WriteString(", (?)")
@@ -245,6 +252,7 @@ func (a *adapter) AddSamples(rawSamples []map[string]interface{}, discreteFeatur
 	chunkEnd = len(rawSamples)
 	lastRawSamples := rawSamples[chunkStart:chunkEnd]
 	if len(lastRawSamples) > 0 {
+		insertStmtBuffer = bytes.Buffer{}
 		insertStmtBuffer.WriteString(insertStmtStart)
 		for i := 1; i < len(lastRawSamples); i++ {
 			insertStmtBuffer.WriteString(", (?")
