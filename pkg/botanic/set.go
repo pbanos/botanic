@@ -27,6 +27,7 @@ type Set interface {
 	Entropy(Feature) float64
 	SubsetWith(FeatureCriterion) Set
 	FeatureValues(Feature) []interface{}
+	CountFeatureValues(Feature) map[string]int
 	Samples() []Sample
 	Count() int
 }
@@ -182,6 +183,27 @@ func (s *cpuIntensiveSubsettingSet) Samples() []Sample {
 		return true
 	})
 	return samples
+}
+
+func (s *memoryIntensiveSubsettingSet) CountFeatureValues(f Feature) map[string]int {
+	result := make(map[string]int)
+	for _, sample := range s.samples {
+		v := sample.ValueFor(f)
+		vString := fmt.Sprintf("%v", v)
+		result[vString]++
+	}
+	return result
+}
+
+func (s *cpuIntensiveSubsettingSet) CountFeatureValues(f Feature) map[string]int {
+	result := make(map[string]int)
+	s.iterateOnSet(func(sample Sample) bool {
+		v := sample.ValueFor(f)
+		vString := fmt.Sprintf("%v", v)
+		result[vString]++
+		return true
+	})
+	return result
 }
 
 func (s *memoryIntensiveSubsettingSet) String() string {

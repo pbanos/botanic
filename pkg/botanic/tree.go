@@ -149,16 +149,8 @@ func newPredictionFromSet(s Set, f Feature) (*Prediction, error) {
 		return nil, fmt.Errorf("cannot make prediction for empty set")
 	}
 	probs := make(map[string]float64)
-	count := 0.0
-	for _, sample := range s.Samples() {
-		if v := sample.ValueFor(f); v != nil {
-			vString := fmt.Sprintf("%v", v)
-			count += 1.0
-			probs[vString] += 1.0
-		}
-	}
-	for k, v := range probs {
-		probs[k] = v / count
+	for v, c := range s.CountFeatureValues(f) {
+		probs[v] = float64(c) / float64(weight)
 	}
 	return &Prediction{probs, weight}, nil
 }

@@ -178,6 +178,32 @@ func (ss *sqlSet) SubsetWith(fc botanic.FeatureCriterion) botanic.Set {
 	}
 }
 
+func (ss *sqlSet) CountFeatureValues(f botanic.Feature) map[string]int {
+	result := make(map[string]int)
+	column, ok := ss.featureNamesColumns[f.Name()]
+	if !ok {
+		panic(fmt.Errorf("unknown feature %s", f.Name()))
+	}
+	if _, ok = f.(*botanic.DiscreteFeature); ok {
+		featureValueCounts, err := ss.db.CountSampleDiscreteFeatureValues(column, ss.criteria)
+		if err != nil {
+			panic(err)
+		}
+		for k, v := range featureValueCounts {
+			result[ss.discreteValues[k]] = v
+		}
+	} else {
+		featureValueCounts, err := ss.db.CountSampleContinuousFeatureValues(column, ss.criteria)
+		if err != nil {
+			panic(err)
+		}
+		for k, v := range featureValueCounts {
+			result[fmt.Sprintf("%f", k)] = v
+		}
+	}
+	return result
+}
+
 func (ss *sqlSet) Write(samples []botanic.Sample) (int, error) {
 	if len(samples) == 0 {
 		return 0, nil

@@ -21,10 +21,11 @@ and returns a partition of the set for the given feature. The result may be nil
 if the obtained information gain is considered insufficient
 */
 func NewDiscretePartition(s Set, f *DiscreteFeature, classFeature Feature, p Pruner) *Partition {
-	var subtrees []*Tree
+	availableValues := f.AvailableValues()
+	subtrees := make([]*Tree, 0, len(availableValues))
 	informationGain := s.Entropy(classFeature)
 	totalCount := float64(s.Count())
-	for _, value := range f.AvailableValues() {
+	for _, value := range availableValues {
 		fc := NewDiscreteFeatureCriterion(f, value)
 		subtree := NewTreeFromFeatureCriterion(fc, s)
 		subtrees = append(subtrees, subtree)
