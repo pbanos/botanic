@@ -25,7 +25,7 @@ func splitCmd(setConfig *setCmdConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "split",
 		Short: "Split a set into two sets",
-		Long:  `Split a set into an ouput set and a split set`,
+		Long:  `Split a set into an output set and a split set`,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := setConfig.Validate()
 			if err != nil {

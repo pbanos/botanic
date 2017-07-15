@@ -61,8 +61,17 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(4)
 			}
-			rootConfig.Logf("Testing tree against testset with %d samples...", testingSet.Count())
-			successRate, errorCount := tree.Test(testingSet, classFeature)
+			count, err := testingSet.Count()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "counting testing set samples: %v\n", err)
+				os.Exit(5)
+			}
+			rootConfig.Logf("Testing tree against testset with %d samples...", count)
+			successRate, errorCount, err := tree.Test(testingSet, classFeature)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "testing tree: %v\n", err)
+				os.Exit(6)
+			}
 			rootConfig.Logf("Done")
 			fmt.Printf("%f success rate, failed to make a prediction for %d samples\n", successRate, errorCount)
 		},

@@ -65,15 +65,24 @@ func growCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(6)
 			}
-			p := botanic.New(features[0:len(features)-1], classFeature, pruner)
-			config.Logf("Growing tree from a set with %d samples and %d features to predict %s ...", trainingSet.Count(), len(features)-1, classFeature.Name())
-			t := p.Grow(trainingSet)
+			p := botanic.New(features[0:len(features)-1], classFeature, pruner, 0)
+			count, err := trainingSet.Count()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "counting training set samples: %v\n", err)
+				os.Exit(7)
+			}
+			config.Logf("Growing tree from a set with %d samples and %d features to predict %s ...", count, len(features)-1, classFeature.Name())
+			t, err := p.Grow(trainingSet)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "growing the tree: %v\n", err)
+				os.Exit(8)
+			}
 			config.Logf("Done")
 			config.Logf("%v", t)
 			err = outputTree(config.output, t)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
-				os.Exit(7)
+				os.Exit(9)
 			}
 		},
 	}
