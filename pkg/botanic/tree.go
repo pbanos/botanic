@@ -40,15 +40,39 @@ type jsonPrediction struct {
 	Weight        int                `json:"weight,omitempty"`
 }
 
+type PredictionError string
+
+/*
+ErrCannotPredictFromSample is the error returned by the Predict method of a tree
+when the prediction cannot be made because the tree itself cannot make
+a prediction for that kind of sample, as opposed to cases where values
+for a feature cannot be obtained for example.
+*/
+const ErrCannotPredictFromSample = PredictionError("no prediction available for this kind of sample")
+
+/*
+ErrCannotPredictFromEmptySet is the error returned when trying to build a prediction
+based on an empty set of data.
+*/
+const ErrCannotPredictFromEmptySet = PredictionError("cannot make prediction for empty set")
+
+func (pe PredictionError) Error() string {
+	return string(pe)
+}
+
 /*
 NewTreeFromFeatureCriterion takes a FeatureCriterion, a set of data and a class Feature
 and returns a non-developed Tree for the subset of data satisfying the FeatureCriterion.
 */
-func NewTreeFromFeatureCriterion(fc FeatureCriterion, s Set) *Tree {
-	return &Tree{
-		set:              s.SubsetWith(fc),
-		featureCriterion: fc,
+func NewTreeFromFeatureCriterion(fc FeatureCriterion, s Set) (*Tree, error) {
+	subset, err := s.SubsetWith(fc)
+	if err != nil {
+		return nil, err
 	}
+	return &Tree{
+		set:              subset,
+		featureCriterion: fc,
+	}, nil
 }
 
 /*
@@ -98,24 +122,36 @@ func (t *Tree) Predict(s Sample) (*Prediction, error) {
 		if t.prediction != nil {
 			return t.prediction, nil
 		}
-		return nil, fmt.Errorf("no prediction available for this kind of sample")
+		return nil, ErrCannotPredictFromSample
 	}
-	if t.undefinedSubtree != nil && s.ValueFor(t.subtreeFeature) == nil {
-		return t.undefinedSubtree.Predict(s)
+	if t.undefinedSubtree != nil {
+		v, err := s.ValueFor(t.subtreeFeature)
+		if err != nil {
+			return nil, err
+		}
+		if v == nil {
+			return t.undefinedSubtree.Predict(s)
+		}
 	}
 	var prediction *Prediction
 	for _, subtree := range t.subtrees {
-		if subtree.featureCriterion != nil && subtree.featureCriterion.SatisfiedBy(s) {
-			subtreePrediction, err := subtree.Predict(s)
+		if subtree.featureCriterion != nil {
+			ok, err := subtree.featureCriterion.SatisfiedBy(s)
 			if err != nil {
 				return nil, err
 			}
-			if prediction == nil {
-				prediction = subtreePrediction
-			} else {
-				prediction, err = joinPredictions(prediction, subtreePrediction)
+			if ok {
+				subtreePrediction, err := subtree.Predict(s)
 				if err != nil {
 					return nil, err
+				}
+				if prediction == nil {
+					prediction = subtreePrediction
+				} else {
+					prediction, err = joinPredictions(prediction, subtreePrediction)
+					if err != nil {
+						return nil, err
+					}
 				}
 			}
 		}
@@ -129,7 +165,7 @@ func (t *Tree) Predict(s Sample) (*Prediction, error) {
 func joinPredictions(p1 *Prediction, p2 *Prediction) (*Prediction, error) {
 	totalWeight := p1.weight + p2.weight
 	if totalWeight == 0 {
-		return nil, fmt.Errorf("cannot join weightless predictions")
+		return nil, ErrCannotPredictFromEmptySet
 	}
 	relativeWeight := float64(p1.weight) / float64(totalWeight)
 	mergedProbs := make(map[string]float64)
@@ -144,12 +180,19 @@ func joinPredictions(p1 *Prediction, p2 *Prediction) (*Prediction, error) {
 }
 
 func newPredictionFromSet(s Set, f Feature) (*Prediction, error) {
-	weight := s.Count()
+	weight, err := s.Count()
+	if err != nil {
+		return nil, err
+	}
 	if weight == 0 {
-		return nil, fmt.Errorf("cannot make prediction for empty set")
+		return nil, ErrCannotPredictFromEmptySet
 	}
 	probs := make(map[string]float64)
-	for v, c := range s.CountFeatureValues(f) {
+	fvc, err := s.CountFeatureValues(f)
+	if err != nil {
+		return nil, err
+	}
+	for v, c := range fvc {
 		probs[v] = float64(c) / float64(weight)
 	}
 	return &Prediction{probs, weight}, nil
@@ -296,27 +339,45 @@ func (p *Prediction) UnmarshalJSON(b []byte) error {
 }
 
 /*
-Test takes a Set and a class Feature and returns two values:
+Test takes a Set and a class Feature and returns three values:
  * the prediction success rate of the tree over the given Set for the classFeature
- * the number of failing predictions for the set
+ * the number of failing predictions for the set because of ErrCannotPredictFromSample errors
+ * an error if a prediction could not be set for reasons other than the tree not
+   being able to do so. If this is not nil, the other values will be 0.0 and 0
+   respectively
 */
-func (t *Tree) Test(s Set, classFeature Feature) (float64, int) {
+func (t *Tree) Test(s Set, classFeature Feature) (float64, int, error) {
 	if t == nil {
-		return 0.0, 0
+		return 0.0, 0, nil
 	}
 	var result float64
 	var errCount int
-	for _, sample := range s.Samples() {
+	samples, err := s.Samples()
+	if err != nil {
+		return 0.0, 0, err
+	}
+	count, err := s.Count()
+	if err != nil {
+		return 0.0, 0, err
+	}
+	for _, sample := range samples {
 		p, err := t.Predict(sample)
 		if err != nil {
+			if err != ErrCannotPredictFromSample {
+				return 0.0, 0, err
+			}
 			errCount++
 		} else {
 			pV, _ := p.PredictedValue()
-			if pV == sample.ValueFor(classFeature) {
+			v, err := sample.ValueFor(classFeature)
+			if err != nil {
+				return 0.0, 0, err
+			}
+			if pV == v {
 				result += 1.0
 			}
 		}
 	}
-	result = result / float64(s.Count())
-	return result, errCount
+	result = result / float64(count)
+	return result, errCount, nil
 }

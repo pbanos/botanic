@@ -17,7 +17,7 @@ Its Feature method returns the feature on which the criterion is applied.
 */
 type FeatureCriterion interface {
 	Feature() Feature
-	SatisfiedBy(sample Sample) bool
+	SatisfiedBy(sample Sample) (bool, error)
 }
 
 /*
@@ -108,16 +108,19 @@ sample satisfies the criterion. Specifically, it returns false if the sample doe
 not define a value for the feature, true if the value, being a float64, is in the
 range defined by the criterion; and false otherwise.
 */
-func (cfc *continuousFeatureCriterion) SatisfiedBy(sample Sample) bool {
-	val := sample.ValueFor(cfc.feature)
+func (cfc *continuousFeatureCriterion) SatisfiedBy(sample Sample) (bool, error) {
+	val, err := sample.ValueFor(cfc.feature)
+	if err != nil {
+		return false, err
+	}
 	if val == nil {
-		return false
+		return false, nil
 	}
 	floatVal, ok := val.(float64)
 	if !ok {
-		return false
+		return false, nil
 	}
-	return (math.IsInf(cfc.a, 0) || cfc.a <= floatVal) && (math.IsInf(cfc.b, 0) || floatVal < cfc.b)
+	return (math.IsInf(cfc.a, 0) || cfc.a <= floatVal) && (math.IsInf(cfc.b, 0) || floatVal < cfc.b), nil
 }
 
 func (cfc *continuousFeatureCriterion) Interval() (float64, float64) {
@@ -156,16 +159,19 @@ sample satisfies the criterion. Specifically, it returns false if the sample doe
 not define a value for the feature, true if the value, being a string, equals the
 value on the criterion; and false otherwise.
 */
-func (dfc *discreteFeatureCriterion) SatisfiedBy(sample Sample) bool {
-	val := sample.ValueFor(dfc.feature)
+func (dfc *discreteFeatureCriterion) SatisfiedBy(sample Sample) (bool, error) {
+	val, err := sample.ValueFor(dfc.feature)
+	if err != nil {
+		return false, err
+	}
 	if val == nil {
-		return false
+		return false, nil
 	}
 	stringVal, ok := val.(string)
 	if !ok {
-		return false
+		return false, nil
 	}
-	return dfc.value == stringVal
+	return dfc.value == stringVal, nil
 }
 
 func (dfc *discreteFeatureCriterion) Value() string {
@@ -188,8 +194,8 @@ func (u *undefinedFeatureCriterion) Feature() Feature {
 	return u.feature
 }
 
-func (u *undefinedFeatureCriterion) SatisfiedBy(sample Sample) bool {
-	return true
+func (u *undefinedFeatureCriterion) SatisfiedBy(sample Sample) (bool, error) {
+	return true, nil
 }
 
 func (u *undefinedFeatureCriterion) String() string {

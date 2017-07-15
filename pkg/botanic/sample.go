@@ -11,7 +11,7 @@ passed as parameter.
 Its Class method returns the class assigned for the sample
 */
 type Sample interface {
-	ValueFor(Feature) interface{}
+	ValueFor(Feature) (interface{}, error)
 }
 
 type sample struct {
@@ -26,8 +26,8 @@ func NewSample(featureValues map[string]interface{}) Sample {
 	return &sample{featureValues}
 }
 
-func (s *sample) ValueFor(feature Feature) interface{} {
-	return s.featureValues[feature.Name()]
+func (s *sample) ValueFor(feature Feature) (interface{}, error) {
+	return s.featureValues[feature.Name()], nil
 }
 
 func (s *sample) String() string {

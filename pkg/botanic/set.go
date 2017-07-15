@@ -24,12 +24,12 @@ contains samples that satisfy it.
 Its Samples method returns the samples it contains
 */
 type Set interface {
-	Entropy(Feature) float64
-	SubsetWith(FeatureCriterion) Set
-	FeatureValues(Feature) []interface{}
-	CountFeatureValues(Feature) map[string]int
-	Samples() []Sample
-	Count() int
+	Entropy(Feature) (float64, error)
+	SubsetWith(FeatureCriterion) (Set, error)
+	FeatureValues(Feature) ([]interface{}, error)
+	CountFeatureValues(Feature) (map[string]int, error)
+	Samples() ([]Sample, error)
+	Count() (int, error)
 }
 
 type memoryIntensiveSubsettingSet struct {
@@ -77,25 +77,29 @@ func NewCPUIntensiveSet(samples []Sample) Set {
 	return &cpuIntensiveSubsettingSet{samples, []FeatureCriterion{}}
 }
 
-func (s *memoryIntensiveSubsettingSet) Count() int {
-	return len(s.samples)
+func (s *memoryIntensiveSubsettingSet) Count() (int, error) {
+	return len(s.samples), nil
 }
 
-func (s *cpuIntensiveSubsettingSet) Count() int {
+func (s *cpuIntensiveSubsettingSet) Count() (int, error) {
 	var length int
-	s.iterateOnSet(func(_ Sample) bool {
+	s.iterateOnSet(func(_ Sample) (bool, error) {
 		length++
-		return true
+		return true, nil
 	})
-	return length
+	return length, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) Entropy(f Feature) float64 {
+func (s *memoryIntensiveSubsettingSet) Entropy(f Feature) (float64, error) {
 	var result float64
 	featureValueCounts := make(map[string]float64)
 	count := 0.0
 	for _, sample := range s.samples {
-		if v := sample.ValueFor(f); v != nil {
+		v, err := sample.ValueFor(f)
+		if err != nil {
+			return result, err
+		}
+		if v != nil {
 			vString := fmt.Sprintf("%v", v)
 			count += 1.0
 			featureValueCounts[vString] += 1.0
@@ -105,128 +109,171 @@ func (s *memoryIntensiveSubsettingSet) Entropy(f Feature) float64 {
 		probValue := v / count
 		result -= probValue * math.Log(probValue)
 	}
-	return result
+	return result, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) Entropy(f Feature) float64 {
+func (s *cpuIntensiveSubsettingSet) Entropy(f Feature) (float64, error) {
 	var result float64
 	featureValueCounts := make(map[string]float64)
 	count := 0.0
-	s.iterateOnSet(func(sample Sample) bool {
-		if v := sample.ValueFor(f); v != nil {
+	err := s.iterateOnSet(func(sample Sample) (bool, error) {
+		v, err := sample.ValueFor(f)
+		if err != nil {
+			return false, err
+		}
+		if v != nil {
 			vString := fmt.Sprintf("%v", v)
 			count += 1.0
 			featureValueCounts[vString] += 1.0
 		}
-		return true
+		return true, nil
 	})
+	if err != nil {
+		return result, err
+	}
 	for _, v := range featureValueCounts {
 		probValue := v / count
 		result -= probValue * math.Log(probValue)
 	}
-	return result
+	return result, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) FeatureValues(f Feature) []interface{} {
+func (s *memoryIntensiveSubsettingSet) FeatureValues(f Feature) ([]interface{}, error) {
 	result := []interface{}{}
 	encountered := make(map[string]bool)
 	for _, sample := range s.samples {
-		v := sample.ValueFor(f)
+		v, err := sample.ValueFor(f)
+		if err != nil {
+			return nil, err
+		}
 		vString := fmt.Sprintf("%v", v)
 		if !encountered[vString] {
 			encountered[vString] = true
 			result = append(result, v)
 		}
 	}
-	return result
+	return result, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) FeatureValues(f Feature) []interface{} {
+func (s *cpuIntensiveSubsettingSet) FeatureValues(f Feature) ([]interface{}, error) {
 	result := []interface{}{}
 	encountered := make(map[string]bool)
-	s.iterateOnSet(func(sample Sample) bool {
-		v := sample.ValueFor(f)
+	err := s.iterateOnSet(func(sample Sample) (bool, error) {
+		v, err := sample.ValueFor(f)
+		if err != nil {
+			return false, err
+		}
 		vString := fmt.Sprintf("%v", v)
 		if !encountered[vString] {
 			encountered[vString] = true
 			result = append(result, v)
 		}
-		return true
+		return true, nil
 	})
-	return result
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) SubsetWith(fc FeatureCriterion) Set {
+func (s *memoryIntensiveSubsettingSet) SubsetWith(fc FeatureCriterion) (Set, error) {
 	var samples []Sample
 	for _, sample := range s.samples {
-		if fc.SatisfiedBy(sample) {
+		ok, err := fc.SatisfiedBy(sample)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
 			samples = append(samples, sample)
 		}
 	}
-	return &memoryIntensiveSubsettingSet{samples}
+	return &memoryIntensiveSubsettingSet{samples}, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) SubsetWith(fc FeatureCriterion) Set {
+func (s *cpuIntensiveSubsettingSet) SubsetWith(fc FeatureCriterion) (Set, error) {
 	criteria := []FeatureCriterion{fc}
 	criteria = append(criteria, s.criteria...)
-	return &cpuIntensiveSubsettingSet{s.samples, criteria}
+	return &cpuIntensiveSubsettingSet{s.samples, criteria}, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) Samples() []Sample {
-	return s.samples
+func (s *memoryIntensiveSubsettingSet) Samples() ([]Sample, error) {
+	return s.samples, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) Samples() []Sample {
+func (s *cpuIntensiveSubsettingSet) Samples() ([]Sample, error) {
 	var samples []Sample
-	s.iterateOnSet(func(sample Sample) bool {
+	err := s.iterateOnSet(func(sample Sample) (bool, error) {
 		samples = append(samples, sample)
-		return true
+		return true, nil
 	})
-	return samples
+	if err != nil {
+		return nil, err
+	}
+	return samples, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) CountFeatureValues(f Feature) map[string]int {
+func (s *memoryIntensiveSubsettingSet) CountFeatureValues(f Feature) (map[string]int, error) {
 	result := make(map[string]int)
 	for _, sample := range s.samples {
-		v := sample.ValueFor(f)
+		v, err := sample.ValueFor(f)
+		if err != nil {
+			return nil, err
+		}
 		vString := fmt.Sprintf("%v", v)
 		result[vString]++
 	}
-	return result
+	return result, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) CountFeatureValues(f Feature) map[string]int {
+func (s *cpuIntensiveSubsettingSet) CountFeatureValues(f Feature) (map[string]int, error) {
 	result := make(map[string]int)
-	s.iterateOnSet(func(sample Sample) bool {
-		v := sample.ValueFor(f)
+	err := s.iterateOnSet(func(sample Sample) (bool, error) {
+		v, err := sample.ValueFor(f)
+		if err != nil {
+			return false, err
+		}
 		vString := fmt.Sprintf("%v", v)
 		result[vString]++
-		return true
+		return true, nil
 	})
-	return result
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (s *memoryIntensiveSubsettingSet) String() string {
-	return fmt.Sprintf("[ %v ]", s.Count())
+	count, _ := s.Count()
+	return fmt.Sprintf("[ %v ]", count)
 }
 
 func (s *cpuIntensiveSubsettingSet) String() string {
-	return fmt.Sprintf("[ %v ]", s.Count())
+	count, _ := s.Count()
+	return fmt.Sprintf("[ %v ]", count)
 }
 
-func (s *cpuIntensiveSubsettingSet) iterateOnSet(lambda func(Sample) bool) {
+func (s *cpuIntensiveSubsettingSet) iterateOnSet(lambda func(Sample) (bool, error)) error {
 	for _, sample := range s.samples {
 		skip := false
 		for _, criterion := range s.criteria {
-			if !criterion.SatisfiedBy(sample) {
+			ok, err := criterion.SatisfiedBy(sample)
+			if err != nil {
+				return err
+			}
+			if !ok {
 				skip = true
 				break
 			}
 		}
 		if !skip {
-			if !lambda(sample) {
+			ok, err := lambda(sample)
+			if err != nil {
+				return err
+			}
+			if !ok {
 				break
 			}
 		}
 	}
+	return nil
 }

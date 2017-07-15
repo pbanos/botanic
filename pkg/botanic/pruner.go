@@ -12,20 +12,20 @@ boolean: true to indicate the partition must be pruned, false to allow its
 adding to the tree and further development.
 */
 type Pruner interface {
-	Prune(s Set, p *Partition, classFeature Feature) bool
+	Prune(s Set, p *Partition, classFeature Feature) (bool, error)
 }
 
 /*
 PrunerFunc wraps a function with the Prune method signature to implement
 the Pruner interface
 */
-type PrunerFunc func(s Set, p *Partition, classFeature Feature) bool
+type PrunerFunc func(s Set, p *Partition, classFeature Feature) (bool, error)
 
 /*
 Prune takes a set, a partition and a class Feature and invokes the
 PrunerFunc with those parameters to return its boolean result.
 */
-func (pf PrunerFunc) Prune(s Set, p *Partition, classFeature Feature) bool {
+func (pf PrunerFunc) Prune(s Set, p *Partition, classFeature Feature) (bool, error) {
 	return pf(s, p, classFeature)
 }
 
@@ -42,15 +42,35 @@ with
  * S1, S2, ... Si begin the subset of data for the partition subtree 1, 2, ... i
 */
 func DefaultPruner() Pruner {
-	return PrunerFunc(func(s Set, p *Partition, classFeature Feature) bool {
-		n := float64(s.Count())
-		k := float64(len(s.FeatureValues(classFeature)))
-		minimum := math.Log(n-1.0) + math.Log(math.Pow(3.0, k)-2) - k*s.Entropy(classFeature)
+	return PrunerFunc(func(s Set, p *Partition, classFeature Feature) (bool, error) {
+		count, err := s.Count()
+		if err != nil {
+			return false, err
+		}
+		n := float64(count)
+		fvs, err := s.FeatureValues(classFeature)
+		if err != nil {
+			return false, err
+		}
+		k := float64(len(fvs))
+		sEntropy, err := s.Entropy(classFeature)
+		if err != nil {
+			return false, err
+		}
+		minimum := math.Log(n-1.0) + math.Log(math.Pow(3.0, k)-2) - k*sEntropy
 		for _, st := range p.subtrees {
-			minimum += float64(len(st.set.FeatureValues(classFeature))) * st.set.Entropy(classFeature)
+			stEntropy, err := st.set.Entropy(classFeature)
+			if err != nil {
+				return false, err
+			}
+			stfvs, err := st.set.FeatureValues(classFeature)
+			if err != nil {
+				return false, err
+			}
+			minimum += float64(len(stfvs)) * stEntropy
 		}
 		minimum = minimum / n
-		return minimum > p.informationGain
+		return minimum > p.informationGain, nil
 	})
 }
 
@@ -60,8 +80,8 @@ and returns a Pruner whose Prune method returns whether the informationGainThres
 is greater or equal to the received partition's information gain
 */
 func FixedInformationGainPruner(informationGainThreshold float64) Pruner {
-	return PrunerFunc(func(s Set, p *Partition, classFeature Feature) bool {
-		return informationGainThreshold >= p.informationGain
+	return PrunerFunc(func(s Set, p *Partition, classFeature Feature) (bool, error) {
+		return informationGainThreshold >= p.informationGain, nil
 	})
 }
 
@@ -70,7 +90,7 @@ NoPruner returns a Pruner whose Prune method always returns false, that is,
 never prunes.
 */
 func NoPruner() Pruner {
-	return PrunerFunc(func(s Set, p *Partition, classFeature Feature) bool {
-		return false
+	return PrunerFunc(func(s Set, p *Partition, classFeature Feature) (bool, error) {
+		return false, nil
 	})
 }

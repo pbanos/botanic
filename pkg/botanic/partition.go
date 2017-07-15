@@ -20,22 +20,44 @@ NewDiscretePartition takes a set, a discrete feature and a class feature
 and returns a partition of the set for the given feature. The result may be nil
 if the obtained information gain is considered insufficient
 */
-func NewDiscretePartition(s Set, f *DiscreteFeature, classFeature Feature, p Pruner) *Partition {
+func NewDiscretePartition(s Set, f *DiscreteFeature, classFeature Feature, p Pruner) (*Partition, error) {
 	availableValues := f.AvailableValues()
 	subtrees := make([]*Tree, 0, len(availableValues))
-	informationGain := s.Entropy(classFeature)
-	totalCount := float64(s.Count())
+	informationGain, err := s.Entropy(classFeature)
+	if err != nil {
+		return nil, err
+	}
+	count, err := s.Count()
+	if err != nil {
+		return nil, err
+	}
+	totalCount := float64(count)
 	for _, value := range availableValues {
 		fc := NewDiscreteFeatureCriterion(f, value)
-		subtree := NewTreeFromFeatureCriterion(fc, s)
+		subtree, err := NewTreeFromFeatureCriterion(fc, s)
+		if err != nil {
+			return nil, err
+		}
 		subtrees = append(subtrees, subtree)
-		informationGain -= subtree.set.Entropy(classFeature) * float64(subtree.set.Count()) / totalCount
+		subtreeEntropy, err := subtree.set.Entropy(classFeature)
+		if err != nil {
+			return nil, err
+		}
+		subtreeCount, err := subtree.set.Count()
+		if err != nil {
+			return nil, err
+		}
+		informationGain -= subtreeEntropy * float64(subtreeCount) / totalCount
 	}
 	result := &Partition{f, subtrees, informationGain}
-	if p.Prune(s, result, classFeature) {
-		return nil
+	ok, err := p.Prune(s, result, classFeature)
+	if err != nil {
+		return nil, err
 	}
-	return result
+	if ok {
+		return nil, nil
+	}
+	return result, nil
 }
 
 /*
@@ -43,68 +65,135 @@ NewContinuousPartition takes a set, a continuous feature and a class feature
 and returns a partition of the set for the given feature. The result may be nil
 if the obtained information gain is considered insufficient
 */
-func NewContinuousPartition(s Set, f *ContinuousFeature, classFeature Feature, p Pruner) *Partition {
-	result := newContinuousPartition(s, f, classFeature, s.Entropy(classFeature), math.Inf(-1), math.Inf(1), p)
-	if result == nil || p.Prune(s, result, classFeature) {
-		return nil
+func NewContinuousPartition(s Set, f *ContinuousFeature, classFeature Feature, p Pruner) (*Partition, error) {
+	sEntropy, err := s.Entropy(classFeature)
+	if err != nil {
+		return nil, err
 	}
-	return result
+	result, err := newContinuousPartition(s, f, classFeature, sEntropy, math.Inf(-1), math.Inf(1), p)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	ok, err := p.Prune(s, result, classFeature)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return nil, nil
+	}
+	return result, nil
 }
 
 /*
 newRangePartition returns the partition of the given range in 2 parts that generates the most information gain
 */
-func newRangePartition(s Set, f *ContinuousFeature, classFeature Feature, entropy, a, b float64) *Partition {
+func newRangePartition(s Set, f *ContinuousFeature, classFeature Feature, entropy, a, b float64) (*Partition, error) {
 	var floatValues []float64
-	for _, v := range s.FeatureValues(f) {
+	sfvs, err := s.FeatureValues(f)
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range sfvs {
 		vf, _ := v.(float64)
 		floatValues = append(floatValues, vf)
 	}
 	if len(floatValues) < 2 {
-		return nil
+		return nil, nil
 	}
 	sort.Float64s(floatValues)
 	var result *Partition
 	for i, vf := range floatValues[1:] {
 		threshold := (floatValues[i] + vf) / 2.0
-		subtrees := []*Tree{
-			NewTreeFromFeatureCriterion(NewContinuousFeatureCriterion(f, a, threshold), s),
-			NewTreeFromFeatureCriterion(NewContinuousFeatureCriterion(f, threshold, b), s),
+		t1, err := NewTreeFromFeatureCriterion(NewContinuousFeatureCriterion(f, a, threshold), s)
+		if err != nil {
+			return nil, err
 		}
+		t2, err := NewTreeFromFeatureCriterion(NewContinuousFeatureCriterion(f, threshold, b), s)
+		if err != nil {
+			return nil, err
+		}
+		subtrees := []*Tree{t1, t2}
 		informationGain := entropy
-		totalCount := float64(s.Count())
+		count, err := s.Count()
+		if err != nil {
+			return nil, err
+		}
+		totalCount := float64(count)
 		for _, subtree := range subtrees {
-			informationGain -= subtree.set.Entropy(classFeature) * float64(subtree.set.Count()) / totalCount
+			subtreeEntropy, err := subtree.set.Entropy(classFeature)
+			if err != nil {
+				return nil, err
+			}
+			subtreeCount, err := subtree.set.Count()
+			if err != nil {
+				return nil, err
+			}
+			informationGain -= subtreeEntropy * float64(subtreeCount) / totalCount
 		}
 		if result == nil || result.informationGain < informationGain {
 			result = &Partition{f, subtrees, informationGain}
 		}
 	}
-	return result
+	return result, nil
 }
 
-func newContinuousPartition(s Set, f *ContinuousFeature, classFeature Feature, entropy, a, b float64, p Pruner) *Partition {
-	initialPartition := newRangePartition(s, f, classFeature, entropy, a, b)
-	if initialPartition == nil || p.Prune(s, initialPartition, classFeature) {
-		return nil
+func newContinuousPartition(s Set, f *ContinuousFeature, classFeature Feature, entropy, a, b float64, p Pruner) (*Partition, error) {
+	initialPartition, err := newRangePartition(s, f, classFeature, entropy, a, b)
+	if err != nil {
+		return nil, err
+	}
+	if initialPartition == nil {
+		return nil, nil
+	}
+	ok, err := p.Prune(s, initialPartition, classFeature)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return nil, nil
 	}
 	var resultSubtrees []*Tree
 	informationGain := entropy
-	totalCount := float64(s.Count())
+	count, err := s.Count()
+	if err != nil {
+		return nil, err
+	}
+	totalCount := float64(count)
 	for _, subtree := range initialPartition.subtrees {
 		fc, _ := subtree.featureCriterion.(ContinuousFeatureCriterion)
 		a, b := fc.Interval()
-		subsetEntropy := subtree.set.Entropy(classFeature)
-		subpartition := newContinuousPartition(subtree.set, f, classFeature, subsetEntropy, a, b, p)
+		subsetEntropy, err := subtree.set.Entropy(classFeature)
+		if err != nil {
+			return nil, err
+		}
+		subpartition, err := newContinuousPartition(subtree.set, f, classFeature, subsetEntropy, a, b, p)
+		if err != nil {
+			return nil, err
+		}
 		if subpartition == nil {
+			subtreeCount, err := subtree.set.Count()
+			if err != nil {
+				return nil, err
+			}
 			resultSubtrees = append(resultSubtrees, subtree)
-			informationGain -= subsetEntropy * float64(subtree.set.Count()) / totalCount
+			informationGain -= subsetEntropy * float64(subtreeCount) / totalCount
 		} else {
 			for _, st := range subpartition.subtrees {
+				stEntropy, err := st.set.Entropy(classFeature)
+				if err != nil {
+					return nil, err
+				}
+				stCount, err := st.set.Count()
+				if err != nil {
+					return nil, err
+				}
+				informationGain -= stEntropy * float64(stCount) / totalCount
 				resultSubtrees = append(resultSubtrees, st)
-				informationGain -= st.set.Entropy(classFeature) * float64(st.set.Count()) / totalCount
 			}
 		}
 	}
-	return &Partition{f, resultSubtrees, informationGain}
+	return &Partition{f, resultSubtrees, informationGain}, nil
 }
