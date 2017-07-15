@@ -2,6 +2,7 @@ package bio
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -62,10 +63,10 @@ func NewReadSample(r io.Reader, features []botanic.Feature, featureValueRequeste
 	return &readSample{make(map[string]interface{}), undefinedValue, scanner, featureValueRequester, features}
 }
 
-func (rs *readSample) ValueFor(f botanic.Feature) interface{} {
+func (rs *readSample) ValueFor(f botanic.Feature) (interface{}, error) {
 	value, ok := rs.obtainedValues[f.Name()]
 	if ok {
-		return value
+		return value, nil
 	}
 	var featureWithInfo botanic.Feature
 	for _, feature := range rs.features {
@@ -74,11 +75,11 @@ func (rs *readSample) ValueFor(f botanic.Feature) interface{} {
 		}
 	}
 	if featureWithInfo == nil {
-		return nil
+		return nil, fmt.Errorf("have no information about feature %s, do not know how to read its value", f.Name())
 	}
 	err := rs.featureValueRequester.RequestValueFor(featureWithInfo)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	switch featureWithInfo := featureWithInfo.(type) {
 	case *botanic.ContinuousFeature:
@@ -86,46 +87,63 @@ func (rs *readSample) ValueFor(f botanic.Feature) interface{} {
 	case *botanic.DiscreteFeature:
 		return rs.readDiscreteFeature(featureWithInfo)
 	}
-	return nil
+	return nil, fmt.Errorf("do not know how to read a value for features of type %T", featureWithInfo)
 }
 
-func (rs *readSample) readContinuousFeature(f botanic.Feature) interface{} {
+func (rs *readSample) readContinuousFeature(f botanic.Feature) (interface{}, error) {
+	var value float64
+	var err error
 	for rs.scanner.Scan() {
 		line := rs.scanner.Text()
 		if line == rs.undefinedValue {
 			rs.obtainedValues[f.Name()] = nil
-			break
+			return nil, nil
 		}
-		value, err := strconv.ParseFloat(line, 64)
-		if err != nil {
+		value, err = strconv.ParseFloat(line, 64)
+		if err == nil {
 			rs.obtainedValues[f.Name()] = value
-			return value
+			return value, nil
 		}
 		err = rs.featureValueRequester.RejectValueFor(f, line)
 		if err != nil {
 			break
 		}
 	}
-	return nil
+	if err != nil {
+		return nil, err
+	}
+	err = rs.scanner.Err()
+	if err != nil {
+		return nil, err
+	}
+	return nil, fmt.Errorf("EOF when requesting value")
 }
 
-func (rs *readSample) readDiscreteFeature(df *botanic.DiscreteFeature) interface{} {
+func (rs *readSample) readDiscreteFeature(df *botanic.DiscreteFeature) (interface{}, error) {
+	var err error
 	for rs.scanner.Scan() {
 		line := rs.scanner.Text()
 		if line == rs.undefinedValue {
 			rs.obtainedValues[df.Name()] = nil
-			break
+			return nil, nil
 		}
 		for _, v := range df.AvailableValues() {
 			if v == line {
 				rs.obtainedValues[df.Name()] = v
-				return v
+				return v, nil
 			}
 		}
-		err := rs.featureValueRequester.RejectValueFor(df, line)
+		err = rs.featureValueRequester.RejectValueFor(df, line)
 		if err != nil {
 			break
 		}
 	}
-	return nil
+	if err != nil {
+		return nil, err
+	}
+	err = rs.scanner.Err()
+	if err != nil {
+		return nil, err
+	}
+	return nil, fmt.Errorf("EOF when requesting value")
 }

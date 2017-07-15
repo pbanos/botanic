@@ -183,7 +183,11 @@ func WriteCSVSet(writer io.Writer, s botanic.Set, features []botanic.Feature) er
 	if err != nil {
 		return err
 	}
-	_, err = cw.Write(s.Samples())
+	samples, err := s.Samples()
+	if err != nil {
+		return err
+	}
+	_, err = cw.Write(samples)
 	if err != nil {
 		return err
 	}
@@ -249,7 +253,10 @@ func (cw *csvWriter) Write(samples []botanic.Sample) (int, error) {
 func (cw *csvWriter) WriteSample(sample botanic.Sample) error {
 	record := make([]string, len(cw.features))
 	for j, f := range cw.features {
-		v := sample.ValueFor(f)
+		v, err := sample.ValueFor(f)
+		if err != nil {
+			return err
+		}
 		if v == nil {
 			record[j] = "?"
 		} else {
