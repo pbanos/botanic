@@ -54,7 +54,7 @@ type ColumnNameFunc func(string) (string, error)
 NewFeatureCriteria takes a botanic.FeatureCriterion, a ColumnNameFunc and a map of
 string to int containing a dictionary for converting discrete string values into
 their integer representations and returns a slice of FeatureCriterion equivalent
-to the given FeatureCriterion or an error.
+to the given botanic.FeatureCriterion or an error.
 
 An error will be returned the ColumnNameFunc cannot provide a name for the
 feature of the feature criterion, or if the given botanic.FeatureCriterion is a

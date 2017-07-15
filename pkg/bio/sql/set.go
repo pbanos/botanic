@@ -74,24 +74,20 @@ func CreateSet(dbAdapter Adapter, features []botanic.Feature) (Set, error) {
 	return ss, nil
 }
 
-func (ss *sqlSet) Count() int {
-	count, err := ss.db.CountSamples(ss.criteria)
-	if err != nil {
-		panic(err)
-	}
-	return count
+func (ss *sqlSet) Count() (int, error) {
+	return ss.db.CountSamples(ss.criteria)
 }
 
-func (ss *sqlSet) Entropy(f botanic.Feature) float64 {
+func (ss *sqlSet) Entropy(f botanic.Feature) (float64, error) {
 	var result, count float64
 	column, ok := ss.featureNamesColumns[f.Name()]
 	if !ok {
-		panic(fmt.Errorf("unknown feature %s", f.Name()))
+		return 0.0, fmt.Errorf("unknown feature %s", f.Name())
 	}
 	if _, ok = f.(*botanic.DiscreteFeature); ok {
 		featureValueCounts, err := ss.db.CountSampleDiscreteFeatureValues(column, ss.criteria)
 		if err != nil {
-			panic(err)
+			return 0.0, err
 		}
 		for _, c := range featureValueCounts {
 			count += float64(c)
@@ -103,7 +99,7 @@ func (ss *sqlSet) Entropy(f botanic.Feature) float64 {
 	} else {
 		featureValueCounts, err := ss.db.CountSampleContinuousFeatureValues(column, ss.criteria)
 		if err != nil {
-			panic(err)
+			return 0.0, err
 		}
 		for _, c := range featureValueCounts {
 			count += float64(c)
@@ -113,21 +109,21 @@ func (ss *sqlSet) Entropy(f botanic.Feature) float64 {
 			result -= probValue * math.Log(probValue)
 		}
 	}
-	return result
+	return result, nil
 }
 
-func (ss *sqlSet) FeatureValues(f botanic.Feature) []interface{} {
+func (ss *sqlSet) FeatureValues(f botanic.Feature) ([]interface{}, error) {
 	var err error
 	var result []interface{}
 	column, ok := ss.featureNamesColumns[f.Name()]
 	if !ok {
-		panic(fmt.Errorf("unknown feature %s", f.Name()))
+		return nil, fmt.Errorf("unknown feature %s", f.Name())
 	}
 	if _, ok = f.(*botanic.DiscreteFeature); ok {
 		var values []int
 		values, err = ss.db.ListSampleDiscreteFeatureValues(column, ss.criteria)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		for _, v := range values {
 			result = append(result, v)
@@ -136,31 +132,31 @@ func (ss *sqlSet) FeatureValues(f botanic.Feature) []interface{} {
 		var values []float64
 		values, err = ss.db.ListSampleContinuousFeatureValues(column, ss.criteria)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		for _, v := range values {
 			result = append(result, v)
 		}
 	}
-	return result
+	return result, nil
 }
 
-func (ss *sqlSet) Samples() []botanic.Sample {
+func (ss *sqlSet) Samples() ([]botanic.Sample, error) {
 	rawSamples, err := ss.db.ListSamples(ss.criteria, ss.dfColumns, ss.cfColumns)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	samples := make([]botanic.Sample, 0, len(rawSamples))
 	for _, s := range rawSamples {
 		samples = append(samples, &Sample{Values: s, DiscreteFeatureValues: ss.discreteValues, FeatureNamesColumns: ss.featureNamesColumns})
 	}
-	return samples
+	return samples, nil
 }
 
-func (ss *sqlSet) SubsetWith(fc botanic.FeatureCriterion) botanic.Set {
+func (ss *sqlSet) SubsetWith(fc botanic.FeatureCriterion) (botanic.Set, error) {
 	rfc, err := NewFeatureCriteria(fc, ss.db.ColumnName, ss.inverseDiscreteValues)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	subsetCriteria := make([]*FeatureCriterion, 0, len(ss.criteria)+len(rfc))
 	subsetCriteria = append(subsetCriteria, ss.criteria...)
@@ -175,19 +171,19 @@ func (ss *sqlSet) SubsetWith(fc botanic.FeatureCriterion) botanic.Set {
 		columnFeatures:        ss.columnFeatures,
 		dfColumns:             ss.dfColumns,
 		cfColumns:             ss.cfColumns,
-	}
+	}, nil
 }
 
-func (ss *sqlSet) CountFeatureValues(f botanic.Feature) map[string]int {
+func (ss *sqlSet) CountFeatureValues(f botanic.Feature) (map[string]int, error) {
 	result := make(map[string]int)
 	column, ok := ss.featureNamesColumns[f.Name()]
 	if !ok {
-		panic(fmt.Errorf("unknown feature %s", f.Name()))
+		return nil, fmt.Errorf("unknown feature %s", f.Name())
 	}
 	if _, ok = f.(*botanic.DiscreteFeature); ok {
 		featureValueCounts, err := ss.db.CountSampleDiscreteFeatureValues(column, ss.criteria)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		for k, v := range featureValueCounts {
 			result[ss.discreteValues[k]] = v
@@ -195,13 +191,13 @@ func (ss *sqlSet) CountFeatureValues(f botanic.Feature) map[string]int {
 	} else {
 		featureValueCounts, err := ss.db.CountSampleContinuousFeatureValues(column, ss.criteria)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		for k, v := range featureValueCounts {
 			result[fmt.Sprintf("%f", k)] = v
 		}
 	}
-	return result
+	return result, nil
 }
 
 func (ss *sqlSet) Write(samples []botanic.Sample) (int, error) {
@@ -323,7 +319,10 @@ func (ss *sqlSet) init() error {
 func (ss *sqlSet) newRawSample(s botanic.Sample) (map[string]interface{}, error) {
 	rs := make(map[string]interface{})
 	for _, f := range ss.features {
-		v := s.ValueFor(f)
+		v, err := s.ValueFor(f)
+		if err != nil {
+			return nil, err
+		}
 		if v != nil {
 			_, ok := f.(*botanic.DiscreteFeature)
 			if ok {

@@ -47,22 +47,22 @@ whereas for discrete features this value is used as key on the
 DiscreteFeaturesValue dictionary to obtain the string
 representation for it.
 */
-func (s *Sample) ValueFor(f botanic.Feature) interface{} {
+func (s *Sample) ValueFor(f botanic.Feature) (interface{}, error) {
 	c, ok := s.FeatureNamesColumns[f.Name()]
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	v, ok := s.Values[c]
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	_, ok = f.(*botanic.DiscreteFeature)
 	if ok {
 		iv, ok := v.(int)
 		if !ok {
-			panic(fmt.Errorf("expected sql representation for the value of %s to be an int, got %T", f.Name(), v))
+			return nil, fmt.Errorf("expected sql representation for the value of %s to be an int, got %T", f.Name(), v)
 		}
 		v = interface{}(s.DiscreteFeatureValues[iv])
 	}
-	return v
+	return v, nil
 }
