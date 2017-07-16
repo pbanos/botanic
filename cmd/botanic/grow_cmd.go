@@ -8,6 +8,7 @@ import (
 
 	"github.com/pbanos/botanic/pkg/bio"
 	"github.com/pbanos/botanic/pkg/bio/sql"
+	"github.com/pbanos/botanic/pkg/bio/sql/pgadapter"
 	"github.com/pbanos/botanic/pkg/bio/sql/sqlite3adapter"
 	"github.com/pbanos/botanic/pkg/botanic"
 	"github.com/spf13/cobra"
@@ -86,7 +87,7 @@ func growCmd(rootConfig *rootCmdConfig) *cobra.Command {
 			}
 		},
 	}
-	cmd.PersistentFlags().StringVarP(&(config.dataInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
+	cmd.PersistentFlags().StringVarP(&(config.dataInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
 	cmd.PersistentFlags().StringVarP(&(config.metadataInput), "metadata", "m", "", "path to a YML file with metadata describing the different features available available on the input file (required)")
 	cmd.PersistentFlags().StringVarP(&(config.output), "output", "o", "", "path to a file to which the generated tree will be written in JSON format (defaults to STDOUT)")
 	cmd.PersistentFlags().StringVarP(&(config.classFeature), "class-feature", "c", "", "name of the feature the generated tree should predict (required)")
@@ -126,6 +127,9 @@ func (gcc *growCmdConfig) trainingSet(features []botanic.Feature) (botanic.Set, 
 		gcc.Logf("Reading training set from STDIN...")
 		f = os.Stdin
 	} else {
+		if strings.HasPrefix(gcc.dataInput, "postgresql://") {
+			return gcc.PostgreSQLTrainingSet(features)
+		}
 		if strings.HasSuffix(gcc.dataInput, ".db") {
 			return gcc.Sqlite3TrainingSet(features)
 		}
@@ -152,6 +156,16 @@ func (gcc *growCmdConfig) Sqlite3TrainingSet(features []botanic.Feature) (botani
 		return nil, err
 	}
 	gcc.Logf("Opening set over SQLite3 adapter for file %s to read training set...", gcc.dataInput)
+	return sql.OpenSet(adapter, features)
+}
+
+func (gcc *growCmdConfig) PostgreSQLTrainingSet(features []botanic.Feature) (botanic.Set, error) {
+	gcc.Logf("Creating PostgreSQL adapter for url %s to read training set...", gcc.dataInput)
+	adapter, err := pgadapter.New(gcc.dataInput)
+	if err != nil {
+		return nil, err
+	}
+	gcc.Logf("Opening set over PostgreSQL adapter for url %s to read training set...", gcc.dataInput)
 	return sql.OpenSet(adapter, features)
 }
 

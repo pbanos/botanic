@@ -7,6 +7,7 @@ import (
 
 	"github.com/pbanos/botanic/pkg/bio"
 	"github.com/pbanos/botanic/pkg/bio/sql"
+	"github.com/pbanos/botanic/pkg/bio/sql/pgadapter"
 	"github.com/pbanos/botanic/pkg/bio/sql/sqlite3adapter"
 	"github.com/pbanos/botanic/pkg/botanic"
 	"github.com/spf13/cobra"
@@ -76,7 +77,7 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 			fmt.Printf("%f success rate, failed to make a prediction for %d samples\n", successRate, errorCount)
 		},
 	}
-	cmd.PersistentFlags().StringVarP(&(config.dataInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
+	cmd.PersistentFlags().StringVarP(&(config.dataInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
 	cmd.PersistentFlags().StringVarP(&(config.metadataInput), "metadata", "m", "", "path to a YML file with metadata describing the different features available available on the input file (required)")
 	cmd.PersistentFlags().StringVarP(&(config.treeInput), "tree", "t", "", "path to a file from which the tree to test will be read and parsed as JSON (required)")
 	cmd.PersistentFlags().StringVarP(&(config.classFeature), "class-feature", "c", "", "name of the feature the generated tree should predict (required)")
@@ -102,6 +103,9 @@ func (tcc *testCmdConfig) testingSet(features []botanic.Feature) (botanic.Set, e
 		tcc.Logf("Reading testing set from STDIN...")
 		f = os.Stdin
 	} else {
+		if strings.HasPrefix(tcc.dataInput, "postgresql://") {
+			return tcc.PostgreSQLTestingSet(features)
+		}
 		if strings.HasSuffix(tcc.dataInput, ".db") {
 			return tcc.Sqlite3TestingSet(features)
 		}
@@ -128,6 +132,16 @@ func (tcc *testCmdConfig) Sqlite3TestingSet(features []botanic.Feature) (botanic
 		return nil, err
 	}
 	tcc.Logf("Opening set over SQLite3 adapter for file %s to read testing set...", tcc.dataInput)
+	return sql.OpenSet(adapter, features)
+}
+
+func (tcc *testCmdConfig) PostgreSQLTestingSet(features []botanic.Feature) (botanic.Set, error) {
+	tcc.Logf("Creating PostgreSQL adapter for url %s to read testing set...", tcc.dataInput)
+	adapter, err := pgadapter.New(tcc.dataInput)
+	if err != nil {
+		return nil, err
+	}
+	tcc.Logf("Opening set over PostgreSQL adapter for url %s to read testing set...", tcc.dataInput)
 	return sql.OpenSet(adapter, features)
 }
 

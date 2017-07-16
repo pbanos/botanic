@@ -7,6 +7,7 @@ import (
 
 	"github.com/pbanos/botanic/pkg/bio"
 	"github.com/pbanos/botanic/pkg/bio/sql"
+	"github.com/pbanos/botanic/pkg/bio/sql/pgadapter"
 	"github.com/pbanos/botanic/pkg/bio/sql/sqlite3adapter"
 	"github.com/pbanos/botanic/pkg/botanic"
 	"github.com/spf13/cobra"
@@ -91,9 +92,9 @@ func setCmd(rootConfig *rootCmdConfig) *cobra.Command {
 			config.Logf("Done")
 		},
 	}
-	cmd.PersistentFlags().StringVarP(&(config.setInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
+	cmd.PersistentFlags().StringVarP(&(config.setInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
 	cmd.PersistentFlags().StringVarP(&(config.metadataInput), "metadata", "m", "", "path to a YML file with metadata describing the different features available available on the input file (required)")
-	cmd.PersistentFlags().StringVarP(&(config.setOutput), "output", "o", "", "path to a CSV (.csv) or SQLite3 (.db) file to dump the output set (defaults to STDOUT in CSV)")
+	cmd.PersistentFlags().StringVarP(&(config.setOutput), "output", "o", "", "path to a CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL to dump the output set (defaults to STDOUT in CSV)")
 	cmd.AddCommand(splitCmd(config))
 	return cmd
 }
@@ -109,6 +110,9 @@ func (scc *setCmdConfig) OutputWriter(features []botanic.Feature) (writableSet, 
 	var outputFile *os.File
 	var err error
 	if scc.setOutput != "" {
+		if strings.HasPrefix(scc.setOutput, "postgresql://") {
+			return scc.PostgreSQLOutputWriter(features)
+		}
 		if strings.HasSuffix(scc.setOutput, ".db") {
 			return scc.Sqlite3OutputWriter(features)
 		}
@@ -135,6 +139,9 @@ func (scc *setCmdConfig) InputStream(done <-chan struct{}, features []botanic.Fe
 		scc.Logf("Reading input set from STDIN and dumping it into output set...")
 		f = os.Stdin
 	} else {
+		if strings.HasPrefix(scc.setInput, "postgresql://") {
+			return scc.PostgreSQLInputStream(done, features)
+		}
 		if strings.HasSuffix(scc.setInput, ".db") {
 			return scc.Sqlite3InputStream(done, features)
 		}
@@ -187,6 +194,21 @@ func (scc *setCmdConfig) Sqlite3InputStream(done <-chan struct{}, features []bot
 	return sampleStream, errStream, nil
 }
 
+func (scc *setCmdConfig) PostgreSQLInputStream(done <-chan struct{}, features []botanic.Feature) (<-chan botanic.Sample, <-chan error, error) {
+	scc.Logf("Creating PostgreSQL adapter for url %s to read input set...", scc.setInput)
+	adapter, err := pgadapter.New(scc.setInput)
+	if err != nil {
+		return nil, nil, err
+	}
+	scc.Logf("Opening set over PostgreSQL adapter for url %s to read input set...", scc.setInput)
+	set, err := sql.OpenSet(adapter, features)
+	if err != nil {
+		return nil, nil, err
+	}
+	sampleStream, errStream := set.Read(done)
+	return sampleStream, errStream, nil
+}
+
 func (scc *setCmdConfig) Sqlite3OutputWriter(features []botanic.Feature) (writableSet, error) {
 	scc.Logf("Creating SQLite3 adapter for file %s to dump output set...", scc.setOutput)
 	adapter, err := sqlite3adapter.New(scc.setOutput, 0)
@@ -194,6 +216,20 @@ func (scc *setCmdConfig) Sqlite3OutputWriter(features []botanic.Feature) (writab
 		return nil, err
 	}
 	scc.Logf("Opening set over SQLite3 adapter for file %s to dump output set...", scc.setOutput)
+	set, err := sql.CreateSet(adapter, features)
+	if err != nil {
+		return nil, err
+	}
+	return &flushableSampleWriter{set}, nil
+}
+
+func (scc *setCmdConfig) PostgreSQLOutputWriter(features []botanic.Feature) (writableSet, error) {
+	scc.Logf("Creating PostgreSQL adapter for url %s to dump output set...", scc.setOutput)
+	adapter, err := pgadapter.New(scc.setOutput)
+	if err != nil {
+		return nil, err
+	}
+	scc.Logf("Opening set over PostgreSQL adapter for url %s to dump output set...", scc.setOutput)
 	set, err := sql.CreateSet(adapter, features)
 	if err != nil {
 		return nil, err
