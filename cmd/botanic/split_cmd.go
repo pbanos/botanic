@@ -38,6 +38,7 @@ func splitCmd(setConfig *setCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
+			config.Context()
 			config.Logf("Reading features from metadata at %s...", setConfig.metadataInput)
 			features, err := bio.ReadYMLFeaturesFromFile(setConfig.metadataInput)
 			if err != nil {
@@ -58,9 +59,7 @@ func splitCmd(setConfig *setCmdConfig) *cobra.Command {
 				os.Exit(6)
 			}
 
-			done := make(chan struct{})
-			defer close(done)
-			inputStream, errStream, err := setConfig.InputStream(done, features)
+			inputStream, errStream, err := setConfig.InputStream(features)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(7)
@@ -71,14 +70,14 @@ func splitCmd(setConfig *setCmdConfig) *cobra.Command {
 			for s := range inputStream {
 				var n int
 				if (100 * randomizer.Float32()) > float32(config.splitProbability) {
-					n, err = output.Write([]botanic.Sample{s})
+					n, err = output.Write(config.Context(), []botanic.Sample{s})
 					outputCount += n
 				} else {
-					n, err = splitOutput.Write([]botanic.Sample{s})
+					n, err = splitOutput.Write(config.Context(), []botanic.Sample{s})
 					splitCount += n
 				}
 				if err != nil {
-					close(done)
+					config.ContextCancelFunc()
 					break
 				}
 			}
@@ -151,7 +150,7 @@ func (scc *splitCmdConfig) Sqlite3SplitOutputWriter(features []botanic.Feature) 
 		return nil, err
 	}
 	scc.Logf("Opening set over SQLite3 adapter for file %s to dump split set...", scc.splitOutput)
-	set, err := sql.CreateSet(adapter, features)
+	set, err := sql.CreateSet(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +164,7 @@ func (scc *splitCmdConfig) PostgreSQLSplitOutputWriter(features []botanic.Featur
 		return nil, err
 	}
 	scc.Logf("Opening set over PostgreSQL adapter for url %s to dump split set...", scc.splitOutput)
-	set, err := sql.CreateSet(adapter, features)
+	set, err := sql.CreateSet(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -24,6 +25,7 @@ type growCmdConfig struct {
 	cpuIntensiveSet    bool
 	memoryIntensiveSet bool
 	maxDBConns         int
+	ctx                context.Context
 }
 
 func growCmd(rootConfig *rootCmdConfig) *cobra.Command {
@@ -38,6 +40,7 @@ func growCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
+			config.Context()
 			features, err := bio.ReadYMLFeaturesFromFile(config.metadataInput)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -67,13 +70,13 @@ func growCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				os.Exit(6)
 			}
 			p := botanic.New(features[0:len(features)-1], classFeature, pruner, 0)
-			count, err := trainingSet.Count()
+			count, err := trainingSet.Count(config.Context())
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "counting training set samples: %v\n", err)
 				os.Exit(7)
 			}
 			config.Logf("Growing tree from a set with %d samples and %d features to predict %s ...", count, len(features)-1, classFeature.Name())
-			t, err := p.Grow(trainingSet)
+			t, err := p.Grow(config.Context(), trainingSet)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "growing the tree: %v\n", err)
 				os.Exit(8)
@@ -156,7 +159,7 @@ func (gcc *growCmdConfig) Sqlite3TrainingSet(features []botanic.Feature) (botani
 		return nil, err
 	}
 	gcc.Logf("Opening set over SQLite3 adapter for file %s to read training set...", gcc.dataInput)
-	return sql.OpenSet(adapter, features)
+	return sql.OpenSet(gcc.Context(), adapter, features)
 }
 
 func (gcc *growCmdConfig) PostgreSQLTrainingSet(features []botanic.Feature) (botanic.Set, error) {
@@ -166,7 +169,14 @@ func (gcc *growCmdConfig) PostgreSQLTrainingSet(features []botanic.Feature) (bot
 		return nil, err
 	}
 	gcc.Logf("Opening set over PostgreSQL adapter for url %s to read training set...", gcc.dataInput)
-	return sql.OpenSet(adapter, features)
+	return sql.OpenSet(gcc.Context(), adapter, features)
+}
+
+func (gcc *growCmdConfig) Context() context.Context {
+	if gcc.ctx == nil {
+		gcc.ctx = context.Background()
+	}
+	return gcc.ctx
 }
 
 func outputTree(outputPath string, tree *botanic.Tree) error {

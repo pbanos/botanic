@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -18,10 +19,12 @@ type setCmdConfig struct {
 	setInput      string
 	metadataInput string
 	setOutput     string
+	ctx           context.Context
+	cancelFunc    context.CancelFunc
 }
 
 type sampleWriter interface {
-	Write([]botanic.Sample) (int, error)
+	Write(context.Context, []botanic.Sample) (int, error)
 }
 
 type writableSet interface {
@@ -45,6 +48,7 @@ func setCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
+			config.Context()
 			config.Logf("Reading features from metadata at %s...", config.metadataInput)
 			features, err := bio.ReadYMLFeaturesFromFile(config.metadataInput)
 			if err != nil {
@@ -59,18 +63,16 @@ func setCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				os.Exit(3)
 			}
 
-			done := make(chan struct{})
-			defer close(done)
-			inputStream, errStream, err := config.InputStream(done, features)
+			inputStream, errStream, err := config.InputStream(features)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(7)
 			}
 
 			for s := range inputStream {
-				_, err = output.Write([]botanic.Sample{s})
+				_, err = output.Write(config.Context(), []botanic.Sample{s})
 				if err != nil {
-					close(done)
+					config.ContextCancelFunc()
 					break
 				}
 			}
@@ -133,17 +135,17 @@ func (scc *setCmdConfig) OutputWriter(features []botanic.Feature) (writableSet, 
 	return output, nil
 }
 
-func (scc *setCmdConfig) InputStream(done <-chan struct{}, features []botanic.Feature) (<-chan botanic.Sample, <-chan error, error) {
+func (scc *setCmdConfig) InputStream(features []botanic.Feature) (<-chan botanic.Sample, <-chan error, error) {
 	var f *os.File
 	if scc.setInput == "" {
 		scc.Logf("Reading input set from STDIN and dumping it into output set...")
 		f = os.Stdin
 	} else {
 		if strings.HasPrefix(scc.setInput, "postgresql://") {
-			return scc.PostgreSQLInputStream(done, features)
+			return scc.PostgreSQLInputStream(features)
 		}
 		if strings.HasSuffix(scc.setInput, ".db") {
-			return scc.Sqlite3InputStream(done, features)
+			return scc.Sqlite3InputStream(features)
 		}
 		scc.Logf("Opening %s to read input set...", scc.setInput)
 		var err error
@@ -160,7 +162,7 @@ func (scc *setCmdConfig) InputStream(done <-chan struct{}, features []botanic.Fe
 		defer f.Close()
 		err := bio.ReadCSVSetBySample(f, features, func(i int, s botanic.Sample) (bool, error) {
 			select {
-			case <-done:
+			case <-scc.Context().Done():
 				return false, nil
 			case sampleStream <- s:
 			}
@@ -179,33 +181,33 @@ func (scc *setCmdConfig) InputStream(done <-chan struct{}, features []botanic.Fe
 	return sampleStream, errStream, nil
 }
 
-func (scc *setCmdConfig) Sqlite3InputStream(done <-chan struct{}, features []botanic.Feature) (<-chan botanic.Sample, <-chan error, error) {
+func (scc *setCmdConfig) Sqlite3InputStream(features []botanic.Feature) (<-chan botanic.Sample, <-chan error, error) {
 	scc.Logf("Creating SQLite3 adapter for file %s to read input set...", scc.setInput)
 	adapter, err := sqlite3adapter.New(scc.setInput, 0)
 	if err != nil {
 		return nil, nil, err
 	}
 	scc.Logf("Opening set over SQLite3 adapter for file %s to read input set...", scc.setInput)
-	set, err := sql.OpenSet(adapter, features)
+	set, err := sql.OpenSet(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, nil, err
 	}
-	sampleStream, errStream := set.Read(done)
+	sampleStream, errStream := set.Read(scc.Context())
 	return sampleStream, errStream, nil
 }
 
-func (scc *setCmdConfig) PostgreSQLInputStream(done <-chan struct{}, features []botanic.Feature) (<-chan botanic.Sample, <-chan error, error) {
+func (scc *setCmdConfig) PostgreSQLInputStream(features []botanic.Feature) (<-chan botanic.Sample, <-chan error, error) {
 	scc.Logf("Creating PostgreSQL adapter for url %s to read input set...", scc.setInput)
 	adapter, err := pgadapter.New(scc.setInput)
 	if err != nil {
 		return nil, nil, err
 	}
 	scc.Logf("Opening set over PostgreSQL adapter for url %s to read input set...", scc.setInput)
-	set, err := sql.OpenSet(adapter, features)
+	set, err := sql.OpenSet(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, nil, err
 	}
-	sampleStream, errStream := set.Read(done)
+	sampleStream, errStream := set.Read(scc.Context())
 	return sampleStream, errStream, nil
 }
 
@@ -216,7 +218,7 @@ func (scc *setCmdConfig) Sqlite3OutputWriter(features []botanic.Feature) (writab
 		return nil, err
 	}
 	scc.Logf("Opening set over SQLite3 adapter for file %s to dump output set...", scc.setOutput)
-	set, err := sql.CreateSet(adapter, features)
+	set, err := sql.CreateSet(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, err
 	}
@@ -230,11 +232,27 @@ func (scc *setCmdConfig) PostgreSQLOutputWriter(features []botanic.Feature) (wri
 		return nil, err
 	}
 	scc.Logf("Opening set over PostgreSQL adapter for url %s to dump output set...", scc.setOutput)
-	set, err := sql.CreateSet(adapter, features)
+	set, err := sql.CreateSet(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, err
 	}
 	return &flushableSampleWriter{set}, nil
+}
+
+func (scc *setCmdConfig) Context() context.Context {
+	scc.setContextAndCancelFunc()
+	return scc.ctx
+}
+
+func (scc *setCmdConfig) ContextCancelFunc() context.CancelFunc {
+	scc.setContextAndCancelFunc()
+	return scc.cancelFunc
+}
+
+func (scc *setCmdConfig) setContextAndCancelFunc() {
+	if scc.ctx == nil {
+		scc.ctx, scc.cancelFunc = context.WithCancel(context.Background())
+	}
 }
 
 func (fsw *flushableSampleWriter) Flush() error {

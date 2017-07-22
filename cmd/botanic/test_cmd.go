@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -19,6 +20,8 @@ type testCmdConfig struct {
 	dataInput     string
 	metadataInput string
 	classFeature  string
+	ctx           context.Context
+	cancelFunc    context.CancelFunc
 }
 
 func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
@@ -33,6 +36,7 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
+			config.Context()
 			features, err := bio.ReadYMLFeaturesFromFile(config.metadataInput)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -62,13 +66,13 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(4)
 			}
-			count, err := testingSet.Count()
+			count, err := testingSet.Count(config.Context())
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "counting testing set samples: %v\n", err)
 				os.Exit(5)
 			}
 			rootConfig.Logf("Testing tree against testset with %d samples...", count)
-			successRate, errorCount, err := tree.Test(testingSet, classFeature)
+			successRate, errorCount, err := tree.Test(config.Context(), testingSet, classFeature)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "testing tree: %v\n", err)
 				os.Exit(6)
@@ -132,7 +136,7 @@ func (tcc *testCmdConfig) Sqlite3TestingSet(features []botanic.Feature) (botanic
 		return nil, err
 	}
 	tcc.Logf("Opening set over SQLite3 adapter for file %s to read testing set...", tcc.dataInput)
-	return sql.OpenSet(adapter, features)
+	return sql.OpenSet(tcc.Context(), adapter, features)
 }
 
 func (tcc *testCmdConfig) PostgreSQLTestingSet(features []botanic.Feature) (botanic.Set, error) {
@@ -142,7 +146,23 @@ func (tcc *testCmdConfig) PostgreSQLTestingSet(features []botanic.Feature) (bota
 		return nil, err
 	}
 	tcc.Logf("Opening set over PostgreSQL adapter for url %s to read testing set...", tcc.dataInput)
-	return sql.OpenSet(adapter, features)
+	return sql.OpenSet(tcc.Context(), adapter, features)
+}
+
+func (tcc *testCmdConfig) Context() context.Context {
+	tcc.setContextAndCancelFunc()
+	return tcc.ctx
+}
+
+func (tcc *testCmdConfig) ContextCancelFunc() context.CancelFunc {
+	tcc.setContextAndCancelFunc()
+	return tcc.cancelFunc
+}
+
+func (tcc *testCmdConfig) setContextAndCancelFunc() {
+	if tcc.ctx == nil {
+		tcc.ctx, tcc.cancelFunc = context.WithCancel(context.Background())
+	}
 }
 
 func loadTree(filepath string) (*botanic.Tree, error) {
