@@ -1,6 +1,7 @@
 package bio
 
 import (
+	"context"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -13,7 +14,7 @@ import (
 /*
  */
 type CSVWriter interface {
-	Write([]botanic.Sample) (int, error)
+	Write(context.Context, []botanic.Sample) (int, error)
 	Count() int
 	Flush() error
 }
@@ -178,16 +179,16 @@ dumps to the writer the set in CSV format, specifying only the features
 in the given slice for the samples. It returns an error if something
 went wrong when wrting to the writer, or codifying the samples.
 */
-func WriteCSVSet(writer io.Writer, s botanic.Set, features []botanic.Feature) error {
+func WriteCSVSet(ctx context.Context, writer io.Writer, s botanic.Set, features []botanic.Feature) error {
 	cw, err := NewCSVWriter(writer, features)
 	if err != nil {
 		return err
 	}
-	samples, err := s.Samples()
+	samples, err := s.Samples(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = cw.Write(samples)
+	_, err = cw.Write(ctx, samples)
 	if err != nil {
 		return err
 	}
@@ -238,7 +239,7 @@ func (cw *csvWriter) Count() int {
 	return cw.count
 }
 
-func (cw *csvWriter) Write(samples []botanic.Sample) (int, error) {
+func (cw *csvWriter) Write(ctx context.Context, samples []botanic.Sample) (int, error) {
 	n := 0
 	var err error
 	for ; n < len(samples); n++ {

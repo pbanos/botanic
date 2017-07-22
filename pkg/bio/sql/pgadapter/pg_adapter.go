@@ -7,6 +7,7 @@ package pgadapter
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -62,20 +63,20 @@ func (a *adapter) ColumnName(featureName string) (string, error) {
 	return featureName, nil
 }
 
-func (a *adapter) CreateDiscreteValuesTable() error {
-	createStmt, err := a.db.Prepare(discreteValueTableCreateStmt)
+func (a *adapter) CreateDiscreteValuesTable(ctx context.Context) error {
+	createStmt, err := a.db.PrepareContext(ctx, discreteValueTableCreateStmt)
 	if err != nil {
 		return fmt.Errorf("preparing discreteValues creation statement: %v", err)
 	}
 	defer createStmt.Close()
-	_, err = createStmt.Exec()
+	_, err = createStmt.ExecContext(ctx)
 	if err != nil {
 		return fmt.Errorf("running discreteValues creation statement: %v", err)
 	}
 	return nil
 }
 
-func (a *adapter) CreateSampleTable(discreteFeatureColumns, continuousFeatureColumns []string) error {
+func (a *adapter) CreateSampleTable(ctx context.Context, discreteFeatureColumns, continuousFeatureColumns []string) error {
 	var createStmtBuf bytes.Buffer
 	createStmtBuf.WriteString("CREATE TABLE IF NOT EXISTS samples(")
 	for _, c := range discreteFeatureColumns {
@@ -85,19 +86,19 @@ func (a *adapter) CreateSampleTable(discreteFeatureColumns, continuousFeatureCol
 		createStmtBuf.WriteString(fmt.Sprintf(`"%s" REAL NULL, `, c))
 	}
 	createStmtBuf.WriteString(`"id" SERIAL PRIMARY KEY)`)
-	createStmt, err := a.db.Prepare(createStmtBuf.String())
+	createStmt, err := a.db.PrepareContext(ctx, createStmtBuf.String())
 	if err != nil {
 		return fmt.Errorf("preparing samples creation statement: %v", err)
 	}
 	defer createStmt.Close()
-	_, err = createStmt.Exec()
+	_, err = createStmt.ExecContext(ctx)
 	if err != nil {
 		return fmt.Errorf("ensuring samples table exists: %v", err)
 	}
 	return nil
 }
 
-func (a *adapter) AddDiscreteValues(values []string) (int, error) {
+func (a *adapter) AddDiscreteValues(ctx context.Context, values []string) (int, error) {
 	var (
 		chunkStart       = 0
 		chunkEnd         = MaxDiscreteValueInsertionsPerStatement
@@ -112,7 +113,7 @@ func (a *adapter) AddDiscreteValues(values []string) (int, error) {
 		for i := 1; i < MaxDiscreteValueInsertionsPerStatement; i++ {
 			insertStmtBuffer.WriteString(fmt.Sprintf(", ($%d)", i+1))
 		}
-		insertStmt, err := a.db.Prepare(insertStmtBuffer.String())
+		insertStmt, err := a.db.PrepareContext(ctx, insertStmtBuffer.String())
 		if err != nil {
 			return 0, fmt.Errorf("preparing insert command for %d values: %v", MaxDiscreteValueInsertionsPerStatement, err)
 		}
@@ -121,7 +122,7 @@ func (a *adapter) AddDiscreteValues(values []string) (int, error) {
 			for _, v := range values[chunkStart:chunkEnd] {
 				iv = append(iv, v)
 			}
-			_, err = insertStmt.Exec(iv...)
+			_, err = insertStmt.ExecContext(ctx, iv...)
 			if err != nil {
 				return chunkStart, fmt.Errorf("inserting the %dth %d values: %v", c+1, MaxDiscreteValueInsertionsPerStatement, err)
 			}
@@ -141,7 +142,7 @@ func (a *adapter) AddDiscreteValues(values []string) (int, error) {
 		for i := 1; i < len(lastValues); i++ {
 			insertStmtBuffer.WriteString(fmt.Sprintf(", ($%d)", i+1))
 		}
-		insertStmt, err := a.db.Prepare(insertStmtBuffer.String())
+		insertStmt, err := a.db.PrepareContext(ctx, insertStmtBuffer.String())
 		if err != nil {
 			return chunkStart, fmt.Errorf("preparing insert command for %d values: %v", len(lastValues), err)
 		}
@@ -149,7 +150,7 @@ func (a *adapter) AddDiscreteValues(values []string) (int, error) {
 		for _, v := range lastValues {
 			ilv = append(ilv, v)
 		}
-		_, err = insertStmt.Exec(ilv...)
+		_, err = insertStmt.ExecContext(ctx, ilv...)
 		if err != nil {
 			return chunkStart, fmt.Errorf("inserting the last %d values: %v", len(lastValues), err)
 		}
@@ -161,8 +162,8 @@ func (a *adapter) AddDiscreteValues(values []string) (int, error) {
 	return chunkEnd, nil
 }
 
-func (a *adapter) ListDiscreteValues() (map[int]string, error) {
-	rows, err := a.db.Query(`SELECT id, value FROM discreteValues`)
+func (a *adapter) ListDiscreteValues(ctx context.Context) (map[int]string, error) {
+	rows, err := a.db.QueryContext(ctx, `SELECT id, value FROM discreteValues`)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +185,7 @@ func (a *adapter) ListDiscreteValues() (map[int]string, error) {
 	return result, err
 }
 
-func (a *adapter) AddSamples(rawSamples []map[string]interface{}, discreteFeatureColumns, continuousFeatureColumns []string) (int, error) {
+func (a *adapter) AddSamples(ctx context.Context, rawSamples []map[string]interface{}, discreteFeatureColumns, continuousFeatureColumns []string) (int, error) {
 	var (
 		chunkStart            = 0
 		chunkEnd              = MaxSampleInsertionsPerStatement
@@ -218,7 +219,7 @@ func (a *adapter) AddSamples(rawSamples []map[string]interface{}, discreteFeatur
 			}
 			insertStmtStartBuffer.WriteString(`)`)
 		}
-		insertStmt, err := a.db.Prepare(insertStmtBuffer.String())
+		insertStmt, err := a.db.PrepareContext(ctx, insertStmtBuffer.String())
 		if err != nil {
 			return 0, fmt.Errorf("preparing insert command for %d samples: %v", MaxSampleInsertionsPerStatement, err)
 		}
@@ -232,7 +233,7 @@ func (a *adapter) AddSamples(rawSamples []map[string]interface{}, discreteFeatur
 					irs = append(irs, rs[f])
 				}
 			}
-			_, err = insertStmt.Exec(irs...)
+			_, err = insertStmt.ExecContext(ctx, irs...)
 			if err != nil {
 				return chunkStart, fmt.Errorf("inserting the %dth %d samples: %v", c+1, MaxSampleInsertionsPerStatement, err)
 			}
@@ -256,7 +257,7 @@ func (a *adapter) AddSamples(rawSamples []map[string]interface{}, discreteFeatur
 			}
 			insertStmtStartBuffer.WriteString(`)`)
 		}
-		insertStmt, err := a.db.Prepare(insertStmtBuffer.String())
+		insertStmt, err := a.db.PrepareContext(ctx, insertStmtBuffer.String())
 		if err != nil {
 			return chunkStart, fmt.Errorf("preparing insert command for %d values: %v", len(lastRawSamples), err)
 		}
@@ -269,7 +270,7 @@ func (a *adapter) AddSamples(rawSamples []map[string]interface{}, discreteFeatur
 				ilrs = append(ilrs, rs[f])
 			}
 		}
-		_, err = insertStmt.Exec(ilrs...)
+		_, err = insertStmt.ExecContext(ctx, ilrs...)
 		if err != nil {
 			return chunkStart, fmt.Errorf("inserting the last %d values: %v", len(lastRawSamples), err)
 		}
@@ -281,9 +282,10 @@ func (a *adapter) AddSamples(rawSamples []map[string]interface{}, discreteFeatur
 	return chunkEnd, nil
 }
 
-func (a *adapter) ListSamples(criteria []*biosql.FeatureCriterion, discreteFeatureColumns, continuousFeatureColumns []string) ([]map[string]interface{}, error) {
+func (a *adapter) ListSamples(ctx context.Context, criteria []*biosql.FeatureCriterion, discreteFeatureColumns, continuousFeatureColumns []string) ([]map[string]interface{}, error) {
 	var result []map[string]interface{}
 	err := a.IterateOnSamples(
+		ctx,
 		criteria,
 		discreteFeatureColumns,
 		continuousFeatureColumns,
@@ -297,7 +299,7 @@ func (a *adapter) ListSamples(criteria []*biosql.FeatureCriterion, discreteFeatu
 	return result, nil
 }
 
-func (a *adapter) IterateOnSamples(criteria []*biosql.FeatureCriterion, discreteFeatureColumns, continuousFeatureColumns []string, lambda func(int, map[string]interface{}) (bool, error)) error {
+func (a *adapter) IterateOnSamples(ctx context.Context, criteria []*biosql.FeatureCriterion, discreteFeatureColumns, continuousFeatureColumns []string, lambda func(int, map[string]interface{}) (bool, error)) error {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(`SELECT "`)
@@ -312,7 +314,7 @@ func (a *adapter) IterateOnSamples(criteria []*biosql.FeatureCriterion, discrete
 		whereClause, whereValues = buildWhereClause(criteria)
 		queryBuffer.WriteString(whereClause)
 	}
-	rows, err := a.db.Query(queryBuffer.String(), whereValues...)
+	rows, err := a.db.QueryContext(ctx, queryBuffer.String(), whereValues...)
 	if err != nil {
 		return err
 	}
@@ -357,7 +359,7 @@ func (a *adapter) IterateOnSamples(criteria []*biosql.FeatureCriterion, discrete
 	return err
 }
 
-func (a *adapter) CountSamples(criteria []*biosql.FeatureCriterion) (int, error) {
+func (a *adapter) CountSamples(ctx context.Context, criteria []*biosql.FeatureCriterion) (int, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(`SELECT COUNT(*) FROM samples`)
@@ -366,7 +368,7 @@ func (a *adapter) CountSamples(criteria []*biosql.FeatureCriterion) (int, error)
 		whereClause, whereValues = buildWhereClause(criteria)
 		queryBuffer.WriteString(whereClause)
 	}
-	rows, err := a.db.Query(queryBuffer.String(), whereValues...)
+	rows, err := a.db.QueryContext(ctx, queryBuffer.String(), whereValues...)
 	if err != nil {
 		return 0, err
 	}
@@ -382,7 +384,7 @@ func (a *adapter) CountSamples(criteria []*biosql.FeatureCriterion) (int, error)
 	return count, err
 }
 
-func (a *adapter) ListSampleDiscreteFeatureValues(fc string, criteria []*biosql.FeatureCriterion) ([]int, error) {
+func (a *adapter) ListSampleDiscreteFeatureValues(ctx context.Context, fc string, criteria []*biosql.FeatureCriterion) ([]int, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(fmt.Sprintf(`SELECT DISTINCT "%s" FROM samples`, fc))
@@ -391,7 +393,7 @@ func (a *adapter) ListSampleDiscreteFeatureValues(fc string, criteria []*biosql.
 		whereClause, whereValues = buildWhereClause(criteria)
 		queryBuffer.WriteString(whereClause)
 	}
-	rows, err := a.db.Query(queryBuffer.String(), whereValues...)
+	rows, err := a.db.QueryContext(ctx, queryBuffer.String(), whereValues...)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +416,7 @@ func (a *adapter) ListSampleDiscreteFeatureValues(fc string, criteria []*biosql.
 	return result, err
 }
 
-func (a *adapter) ListSampleContinuousFeatureValues(fc string, criteria []*biosql.FeatureCriterion) ([]float64, error) {
+func (a *adapter) ListSampleContinuousFeatureValues(ctx context.Context, fc string, criteria []*biosql.FeatureCriterion) ([]float64, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(fmt.Sprintf(`SELECT DISTINCT "%s" FROM samples`, fc))
@@ -423,7 +425,7 @@ func (a *adapter) ListSampleContinuousFeatureValues(fc string, criteria []*biosq
 		whereClause, whereValues = buildWhereClause(criteria)
 		queryBuffer.WriteString(whereClause)
 	}
-	rows, err := a.db.Query(queryBuffer.String(), whereValues...)
+	rows, err := a.db.QueryContext(ctx, queryBuffer.String(), whereValues...)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +448,7 @@ func (a *adapter) ListSampleContinuousFeatureValues(fc string, criteria []*biosq
 	return result, err
 }
 
-func (a *adapter) CountSampleDiscreteFeatureValues(fc string, criteria []*biosql.FeatureCriterion) (map[int]int, error) {
+func (a *adapter) CountSampleDiscreteFeatureValues(ctx context.Context, fc string, criteria []*biosql.FeatureCriterion) (map[int]int, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(fmt.Sprintf(`SELECT "%s", COUNT("%s") FROM samples`, fc, fc))
@@ -456,7 +458,7 @@ func (a *adapter) CountSampleDiscreteFeatureValues(fc string, criteria []*biosql
 		queryBuffer.WriteString(whereClause)
 	}
 	queryBuffer.WriteString(fmt.Sprintf(` GROUP BY "%s"`, fc))
-	rows, err := a.db.Query(queryBuffer.String(), whereValues...)
+	rows, err := a.db.QueryContext(ctx, queryBuffer.String(), whereValues...)
 	if err != nil {
 		return nil, err
 	}
@@ -480,7 +482,7 @@ func (a *adapter) CountSampleDiscreteFeatureValues(fc string, criteria []*biosql
 	return result, err
 }
 
-func (a *adapter) CountSampleContinuousFeatureValues(fc string, criteria []*biosql.FeatureCriterion) (map[float64]int, error) {
+func (a *adapter) CountSampleContinuousFeatureValues(ctx context.Context, fc string, criteria []*biosql.FeatureCriterion) (map[float64]int, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(fmt.Sprintf(`SELECT "%s", COUNT("%s") FROM samples`, fc, fc))
@@ -490,7 +492,7 @@ func (a *adapter) CountSampleContinuousFeatureValues(fc string, criteria []*bios
 		queryBuffer.WriteString(whereClause)
 	}
 	queryBuffer.WriteString(fmt.Sprintf(` GROUP BY "%s"`, fc))
-	rows, err := a.db.Query(queryBuffer.String(), whereValues...)
+	rows, err := a.db.QueryContext(ctx, queryBuffer.String(), whereValues...)
 	if err != nil {
 		return nil, err
 	}

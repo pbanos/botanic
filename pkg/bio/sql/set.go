@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"math"
 
@@ -15,8 +16,8 @@ returning an error if any errors occur or nil otherwise.
 */
 type Set interface {
 	botanic.Set
-	Write([]botanic.Sample) (int, error)
-	Read(done <-chan struct{}) (<-chan botanic.Sample, <-chan error)
+	Write(context.Context, []botanic.Sample) (int, error)
+	Read(context.Context) (<-chan botanic.Sample, <-chan error)
 }
 
 type sqlSet struct {
@@ -40,13 +41,13 @@ This function expects the adapter to have the samples and discrete value
 tables already created, and the discrete value table initialized with all
 the values of the discrete features in the features slice.
 */
-func OpenSet(dbAdapter Adapter, features []botanic.Feature) (Set, error) {
+func OpenSet(ctx context.Context, dbAdapter Adapter, features []botanic.Feature) (Set, error) {
 	ss := &sqlSet{db: dbAdapter, features: features}
 	err := ss.initFeatureColumns()
 	if err != nil {
 		return nil, err
 	}
-	err = ss.init()
+	err = ss.init(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -61,31 +62,31 @@ This function will ensure that the samples and discrete value tables are
 created on the database, and that the discrete value table has all the
 values for the discrete features on the features slice.
 */
-func CreateSet(dbAdapter Adapter, features []botanic.Feature) (Set, error) {
+func CreateSet(ctx context.Context, dbAdapter Adapter, features []botanic.Feature) (Set, error) {
 	ss := &sqlSet{db: dbAdapter, features: features}
 	err := ss.initFeatureColumns()
 	if err != nil {
 		return nil, err
 	}
-	err = ss.initDB()
+	err = ss.initDB(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return ss, nil
 }
 
-func (ss *sqlSet) Count() (int, error) {
-	return ss.db.CountSamples(ss.criteria)
+func (ss *sqlSet) Count(ctx context.Context) (int, error) {
+	return ss.db.CountSamples(ctx, ss.criteria)
 }
 
-func (ss *sqlSet) Entropy(f botanic.Feature) (float64, error) {
+func (ss *sqlSet) Entropy(ctx context.Context, f botanic.Feature) (float64, error) {
 	var result, count float64
 	column, ok := ss.featureNamesColumns[f.Name()]
 	if !ok {
 		return 0.0, fmt.Errorf("unknown feature %s", f.Name())
 	}
 	if _, ok = f.(*botanic.DiscreteFeature); ok {
-		featureValueCounts, err := ss.db.CountSampleDiscreteFeatureValues(column, ss.criteria)
+		featureValueCounts, err := ss.db.CountSampleDiscreteFeatureValues(ctx, column, ss.criteria)
 		if err != nil {
 			return 0.0, err
 		}
@@ -97,7 +98,7 @@ func (ss *sqlSet) Entropy(f botanic.Feature) (float64, error) {
 			result -= probValue * math.Log(probValue)
 		}
 	} else {
-		featureValueCounts, err := ss.db.CountSampleContinuousFeatureValues(column, ss.criteria)
+		featureValueCounts, err := ss.db.CountSampleContinuousFeatureValues(ctx, column, ss.criteria)
 		if err != nil {
 			return 0.0, err
 		}
@@ -112,7 +113,7 @@ func (ss *sqlSet) Entropy(f botanic.Feature) (float64, error) {
 	return result, nil
 }
 
-func (ss *sqlSet) FeatureValues(f botanic.Feature) ([]interface{}, error) {
+func (ss *sqlSet) FeatureValues(ctx context.Context, f botanic.Feature) ([]interface{}, error) {
 	var err error
 	var result []interface{}
 	column, ok := ss.featureNamesColumns[f.Name()]
@@ -121,7 +122,7 @@ func (ss *sqlSet) FeatureValues(f botanic.Feature) ([]interface{}, error) {
 	}
 	if _, ok = f.(*botanic.DiscreteFeature); ok {
 		var values []int
-		values, err = ss.db.ListSampleDiscreteFeatureValues(column, ss.criteria)
+		values, err = ss.db.ListSampleDiscreteFeatureValues(ctx, column, ss.criteria)
 		if err != nil {
 			return nil, err
 		}
@@ -130,7 +131,7 @@ func (ss *sqlSet) FeatureValues(f botanic.Feature) ([]interface{}, error) {
 		}
 	} else {
 		var values []float64
-		values, err = ss.db.ListSampleContinuousFeatureValues(column, ss.criteria)
+		values, err = ss.db.ListSampleContinuousFeatureValues(ctx, column, ss.criteria)
 		if err != nil {
 			return nil, err
 		}
@@ -141,8 +142,8 @@ func (ss *sqlSet) FeatureValues(f botanic.Feature) ([]interface{}, error) {
 	return result, nil
 }
 
-func (ss *sqlSet) Samples() ([]botanic.Sample, error) {
-	rawSamples, err := ss.db.ListSamples(ss.criteria, ss.dfColumns, ss.cfColumns)
+func (ss *sqlSet) Samples(ctx context.Context) ([]botanic.Sample, error) {
+	rawSamples, err := ss.db.ListSamples(ctx, ss.criteria, ss.dfColumns, ss.cfColumns)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +154,7 @@ func (ss *sqlSet) Samples() ([]botanic.Sample, error) {
 	return samples, nil
 }
 
-func (ss *sqlSet) SubsetWith(fc botanic.FeatureCriterion) (botanic.Set, error) {
+func (ss *sqlSet) SubsetWith(ctx context.Context, fc botanic.FeatureCriterion) (botanic.Set, error) {
 	rfc, err := NewFeatureCriteria(fc, ss.db.ColumnName, ss.inverseDiscreteValues)
 	if err != nil {
 		return nil, err
@@ -174,14 +175,14 @@ func (ss *sqlSet) SubsetWith(fc botanic.FeatureCriterion) (botanic.Set, error) {
 	}, nil
 }
 
-func (ss *sqlSet) CountFeatureValues(f botanic.Feature) (map[string]int, error) {
+func (ss *sqlSet) CountFeatureValues(ctx context.Context, f botanic.Feature) (map[string]int, error) {
 	result := make(map[string]int)
 	column, ok := ss.featureNamesColumns[f.Name()]
 	if !ok {
 		return nil, fmt.Errorf("unknown feature %s", f.Name())
 	}
 	if _, ok = f.(*botanic.DiscreteFeature); ok {
-		featureValueCounts, err := ss.db.CountSampleDiscreteFeatureValues(column, ss.criteria)
+		featureValueCounts, err := ss.db.CountSampleDiscreteFeatureValues(ctx, column, ss.criteria)
 		if err != nil {
 			return nil, err
 		}
@@ -189,7 +190,7 @@ func (ss *sqlSet) CountFeatureValues(f botanic.Feature) (map[string]int, error) 
 			result[ss.discreteValues[k]] = v
 		}
 	} else {
-		featureValueCounts, err := ss.db.CountSampleContinuousFeatureValues(column, ss.criteria)
+		featureValueCounts, err := ss.db.CountSampleContinuousFeatureValues(ctx, column, ss.criteria)
 		if err != nil {
 			return nil, err
 		}
@@ -200,7 +201,7 @@ func (ss *sqlSet) CountFeatureValues(f botanic.Feature) (map[string]int, error) 
 	return result, nil
 }
 
-func (ss *sqlSet) Write(samples []botanic.Sample) (int, error) {
+func (ss *sqlSet) Write(ctx context.Context, samples []botanic.Sample) (int, error) {
 	if len(samples) == 0 {
 		return 0, nil
 	}
@@ -212,14 +213,15 @@ func (ss *sqlSet) Write(samples []botanic.Sample) (int, error) {
 		}
 		rawSamples = append(rawSamples, rs)
 	}
-	return ss.db.AddSamples(rawSamples, ss.dfColumns, ss.cfColumns)
+	return ss.db.AddSamples(ctx, rawSamples, ss.dfColumns, ss.cfColumns)
 }
 
-func (ss *sqlSet) Read(done <-chan struct{}) (<-chan botanic.Sample, <-chan error) {
+func (ss *sqlSet) Read(ctx context.Context) (<-chan botanic.Sample, <-chan error) {
 	sampleStream := make(chan botanic.Sample)
 	errStream := make(chan error)
 	go func() {
 		err := ss.db.IterateOnSamples(
+			ctx,
 			ss.criteria,
 			ss.dfColumns,
 			ss.cfColumns,
@@ -229,7 +231,7 @@ func (ss *sqlSet) Read(done <-chan struct{}) (<-chan botanic.Sample, <-chan erro
 					DiscreteFeatureValues: ss.discreteValues,
 					FeatureNamesColumns:   ss.featureNamesColumns}
 				select {
-				case <-done:
+				case <-ctx.Done():
 					return false, nil
 				case sampleStream <- s:
 				}
@@ -248,25 +250,25 @@ func (ss *sqlSet) Read(done <-chan struct{}) (<-chan botanic.Sample, <-chan erro
 	return sampleStream, errStream
 }
 
-func (ss *sqlSet) initDB() error {
-	err := ss.db.CreateDiscreteValuesTable()
+func (ss *sqlSet) initDB(ctx context.Context) error {
+	err := ss.db.CreateDiscreteValuesTable(ctx)
 	if err != nil {
 		return err
 	}
-	err = ss.db.CreateSampleTable(ss.dfColumns, ss.cfColumns)
+	err = ss.db.CreateSampleTable(ctx, ss.dfColumns, ss.cfColumns)
 	if err != nil {
 		return err
 	}
-	ss.discreteValues, err = ss.db.ListDiscreteValues()
+	ss.discreteValues, err = ss.db.ListDiscreteValues(ctx)
 	if err != nil {
 		return err
 	}
 	newValues := ss.unavailableDiscreteValues()
-	_, err = ss.db.AddDiscreteValues(newValues)
+	_, err = ss.db.AddDiscreteValues(ctx, newValues)
 	if err != nil {
 		return err
 	}
-	err = ss.init()
+	err = ss.init(ctx)
 	if err != nil {
 		return err
 	}
@@ -303,9 +305,9 @@ func (ss *sqlSet) unavailableDiscreteValues() []string {
 	return unavailableDiscreteValues
 }
 
-func (ss *sqlSet) init() error {
+func (ss *sqlSet) init(ctx context.Context) error {
 	var err error
-	ss.discreteValues, err = ss.db.ListDiscreteValues()
+	ss.discreteValues, err = ss.db.ListDiscreteValues(ctx)
 	if err != nil {
 		return err
 	}
