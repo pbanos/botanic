@@ -1,6 +1,9 @@
 package botanic
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 /*
 Pot represents the context in which a tree is grown.
@@ -8,7 +11,7 @@ Pot represents the context in which a tree is grown.
 Its Grow method takes a Set and returns a tree that predicts the set
 */
 type Pot interface {
-	Grow(Set) (*Tree, error)
+	Grow(context.Context, Set) (*Tree, error)
 }
 
 type pot struct {
@@ -27,23 +30,23 @@ func New(features []Feature, fc Feature, p Pruner, maxConcurrency int) Pot {
 	return &pot{features, fc, 0.0, p, maxConcurrency}
 }
 
-func (p *pot) Grow(s Set) (*Tree, error) {
+func (p *pot) Grow(ctx context.Context, s Set) (*Tree, error) {
 	t := &Tree{set: s}
-	q := newQueue(p.maxConcurrency)
+	q := newQueue(ctx, p.maxConcurrency)
 	q.add(p, t, p.features)
 	err := q.waitForAll()
 	return t, err
 }
 
-func (p *pot) develop(t *Tree, features []Feature, q *queue) error {
-	prediction, err := newPredictionFromSet(t.set, p.classFeature)
+func (p *pot) develop(ctx context.Context, t *Tree, features []Feature, q *queue) error {
+	prediction, err := newPredictionFromSet(ctx, t.set, p.classFeature)
 	if err != nil {
 		if err != ErrCannotPredictFromEmptySet {
 			return err
 		}
 	}
 	t.prediction = prediction
-	sEntropy, err := t.set.Entropy(p.classFeature)
+	sEntropy, err := t.set.Entropy(ctx, p.classFeature)
 	if err != nil {
 		return err
 	}
@@ -53,7 +56,7 @@ func (p *pot) develop(t *Tree, features []Feature, q *queue) error {
 	var partition *Partition
 	var featureIndex int
 	for i, f := range features {
-		p, err := p.partition(t.set, f, p.classFeature)
+		p, err := p.partition(ctx, t.set, f, p.classFeature)
 		if err != nil {
 			return err
 		}
@@ -83,13 +86,13 @@ func (p *pot) develop(t *Tree, features []Feature, q *queue) error {
 	return nil
 }
 
-func (p *pot) partition(s Set, f Feature, cf Feature) (*Partition, error) {
+func (p *pot) partition(ctx context.Context, s Set, f Feature, cf Feature) (*Partition, error) {
 	switch f := f.(type) {
 	default:
 		return nil, fmt.Errorf("unknown feature type %T", f)
 	case *DiscreteFeature:
-		return NewDiscretePartition(s, f, cf, p.pruner)
+		return NewDiscretePartition(ctx, s, f, cf, p.pruner)
 	case *ContinuousFeature:
-		return NewContinuousPartition(s, f, cf, p.pruner)
+		return NewContinuousPartition(ctx, s, f, cf, p.pruner)
 	}
 }

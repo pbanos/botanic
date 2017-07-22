@@ -1,6 +1,7 @@
 package botanic
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -64,8 +65,8 @@ func (pe PredictionError) Error() string {
 NewTreeFromFeatureCriterion takes a FeatureCriterion, a set of data and a class Feature
 and returns a non-developed Tree for the subset of data satisfying the FeatureCriterion.
 */
-func NewTreeFromFeatureCriterion(fc FeatureCriterion, s Set) (*Tree, error) {
-	subset, err := s.SubsetWith(fc)
+func NewTreeFromFeatureCriterion(ctx context.Context, fc FeatureCriterion, s Set) (*Tree, error) {
+	subset, err := s.SubsetWith(ctx, fc)
 	if err != nil {
 		return nil, err
 	}
@@ -179,8 +180,8 @@ func joinPredictions(p1 *Prediction, p2 *Prediction) (*Prediction, error) {
 	return &Prediction{mergedProbs, totalWeight}, nil
 }
 
-func newPredictionFromSet(s Set, f Feature) (*Prediction, error) {
-	weight, err := s.Count()
+func newPredictionFromSet(ctx context.Context, s Set, f Feature) (*Prediction, error) {
+	weight, err := s.Count(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +189,7 @@ func newPredictionFromSet(s Set, f Feature) (*Prediction, error) {
 		return nil, ErrCannotPredictFromEmptySet
 	}
 	probs := make(map[string]float64)
-	fvc, err := s.CountFeatureValues(f)
+	fvc, err := s.CountFeatureValues(ctx, f)
 	if err != nil {
 		return nil, err
 	}
@@ -346,17 +347,17 @@ Test takes a Set and a class Feature and returns three values:
    being able to do so. If this is not nil, the other values will be 0.0 and 0
    respectively
 */
-func (t *Tree) Test(s Set, classFeature Feature) (float64, int, error) {
+func (t *Tree) Test(ctx context.Context, s Set, classFeature Feature) (float64, int, error) {
 	if t == nil {
 		return 0.0, 0, nil
 	}
 	var result float64
 	var errCount int
-	samples, err := s.Samples()
+	samples, err := s.Samples(ctx)
 	if err != nil {
 		return 0.0, 0, err
 	}
-	count, err := s.Count()
+	count, err := s.Count(ctx)
 	if err != nil {
 		return 0.0, 0, err
 	}

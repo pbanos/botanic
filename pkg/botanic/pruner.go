@@ -1,6 +1,9 @@
 package botanic
 
-import "math"
+import (
+	"context"
+	"math"
+)
 
 /*
 Pruner is an interface wrappint the Prune method, that can be used
@@ -12,21 +15,21 @@ boolean: true to indicate the partition must be pruned, false to allow its
 adding to the tree and further development.
 */
 type Pruner interface {
-	Prune(s Set, p *Partition, classFeature Feature) (bool, error)
+	Prune(ctx context.Context, s Set, p *Partition, classFeature Feature) (bool, error)
 }
 
 /*
 PrunerFunc wraps a function with the Prune method signature to implement
 the Pruner interface
 */
-type PrunerFunc func(s Set, p *Partition, classFeature Feature) (bool, error)
+type PrunerFunc func(ctx context.Context, s Set, p *Partition, classFeature Feature) (bool, error)
 
 /*
 Prune takes a set, a partition and a class Feature and invokes the
 PrunerFunc with those parameters to return its boolean result.
 */
-func (pf PrunerFunc) Prune(s Set, p *Partition, classFeature Feature) (bool, error) {
-	return pf(s, p, classFeature)
+func (pf PrunerFunc) Prune(ctx context.Context, s Set, p *Partition, classFeature Feature) (bool, error) {
+	return pf(ctx, s, p, classFeature)
 }
 
 /*
@@ -42,28 +45,28 @@ with
  * S1, S2, ... Si begin the subset of data for the partition subtree 1, 2, ... i
 */
 func DefaultPruner() Pruner {
-	return PrunerFunc(func(s Set, p *Partition, classFeature Feature) (bool, error) {
-		count, err := s.Count()
+	return PrunerFunc(func(ctx context.Context, s Set, p *Partition, classFeature Feature) (bool, error) {
+		count, err := s.Count(ctx)
 		if err != nil {
 			return false, err
 		}
 		n := float64(count)
-		fvs, err := s.FeatureValues(classFeature)
+		fvs, err := s.FeatureValues(ctx, classFeature)
 		if err != nil {
 			return false, err
 		}
 		k := float64(len(fvs))
-		sEntropy, err := s.Entropy(classFeature)
+		sEntropy, err := s.Entropy(ctx, classFeature)
 		if err != nil {
 			return false, err
 		}
 		minimum := math.Log(n-1.0) + math.Log(math.Pow(3.0, k)-2) - k*sEntropy
 		for _, st := range p.subtrees {
-			stEntropy, err := st.set.Entropy(classFeature)
+			stEntropy, err := st.set.Entropy(ctx, classFeature)
 			if err != nil {
 				return false, err
 			}
-			stfvs, err := st.set.FeatureValues(classFeature)
+			stfvs, err := st.set.FeatureValues(ctx, classFeature)
 			if err != nil {
 				return false, err
 			}
@@ -80,7 +83,7 @@ and returns a Pruner whose Prune method returns whether the informationGainThres
 is greater or equal to the received partition's information gain
 */
 func FixedInformationGainPruner(informationGainThreshold float64) Pruner {
-	return PrunerFunc(func(s Set, p *Partition, classFeature Feature) (bool, error) {
+	return PrunerFunc(func(ctx context.Context, s Set, p *Partition, classFeature Feature) (bool, error) {
 		return informationGainThreshold >= p.informationGain, nil
 	})
 }
@@ -90,7 +93,7 @@ NoPruner returns a Pruner whose Prune method always returns false, that is,
 never prunes.
 */
 func NoPruner() Pruner {
-	return PrunerFunc(func(s Set, p *Partition, classFeature Feature) (bool, error) {
+	return PrunerFunc(func(ctx context.Context, s Set, p *Partition, classFeature Feature) (bool, error) {
 		return false, nil
 	})
 }

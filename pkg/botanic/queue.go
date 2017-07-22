@@ -1,6 +1,7 @@
 package botanic
 
 import (
+	"context"
 	"fmt"
 	"sync"
 )
@@ -11,13 +12,14 @@ are sent to be developed or expanded
 in tasks.
 */
 type queue struct {
-	workers chan *worker
-	tasks   chan *task
-	done    chan struct{}
-	results chan error
-	wg      *sync.WaitGroup
-	result  chan error
-	stopCmd chan struct{}
+	workers    chan *worker
+	tasks      chan *task
+	ctx        context.Context
+	cancelFunc context.CancelFunc
+	results    chan error
+	wg         *sync.WaitGroup
+	result     chan error
+	stopCmd    chan struct{}
 }
 
 /*
@@ -53,19 +55,18 @@ by a Pot.
 */
 const DefaultMaxConcurrency = 10
 
-func newQueue(workers int) *queue {
+func newQueue(ctx context.Context, workers int) *queue {
 	if workers < 1 {
 		workers = DefaultMaxConcurrency
 	}
-	done := make(chan struct{})
 	wc := make(chan *worker)
 	tasks := make(chan *task)
+	ctx, cancelFunc := context.WithCancel(ctx)
 	results := make(chan error)
 	wg := &sync.WaitGroup{}
 	result := make(chan error, 1)
 	stop := make(chan struct{})
-	q := &queue{wc, tasks, done, results, wg, result, stop}
-	go q.listenForStopping()
+	q := &queue{wc, tasks, ctx, cancelFunc, results, wg, result, stop}
 	go q.run()
 	go q.processTaskResults()
 	for i := 0; i < workers; i++ {
@@ -75,10 +76,7 @@ func newQueue(workers int) *queue {
 }
 
 func (q *queue) stop() {
-	select {
-	case <-q.done:
-	case q.stopCmd <- struct{}{}:
-	}
+	q.cancelFunc()
 }
 
 func (q *queue) add(p *pot, tree *Tree, fs []Feature) {
@@ -86,7 +84,7 @@ func (q *queue) add(p *pot, tree *Tree, fs []Feature) {
 	q.wg.Add(1)
 	go func(t *task) {
 		select {
-		case <-q.done:
+		case <-q.ctx.Done():
 			q.wg.Done()
 		case q.tasks <- t:
 		}
@@ -103,13 +101,13 @@ func (q *queue) run() {
 	var finished bool
 	for !finished {
 		select {
-		case <-q.done:
+		case <-q.ctx.Done():
 			finished = true
 		case w := <-q.workers:
 			select {
 			case t := <-q.tasks:
 				go q.assignTask(t, w)
-			case <-q.done:
+			case <-q.ctx.Done():
 				finished = true
 			}
 		}
@@ -119,7 +117,7 @@ func (q *queue) run() {
 func (q *queue) assignTask(t *task, w *worker) {
 	select {
 	case w.tasks <- t:
-	case <-q.done:
+	case <-q.ctx.Done():
 		q.wg.Done()
 	}
 }
@@ -134,7 +132,7 @@ func (w *worker) run() {
 	var finished bool
 	select {
 	case w.queue.workers <- w:
-	case <-w.queue.done:
+	case <-w.queue.ctx.Done():
 		finished = true
 	}
 	for !finished {
@@ -144,22 +142,22 @@ func (w *worker) run() {
 				break
 			}
 			w.process(t)
-		case <-w.queue.done:
+		case <-w.queue.ctx.Done():
 			finished = true
 		}
 		select {
 		case w.queue.workers <- w:
-		case <-w.queue.done:
+		case <-w.queue.ctx.Done():
 			finished = true
 		}
 	}
 }
 
 func (w *worker) process(t *task) {
-	err := t.pot.develop(t.tree, t.features, w.queue)
+	err := t.pot.develop(w.queue.ctx, t.tree, t.features, w.queue)
 	if err != nil {
 		select {
-		case <-w.queue.done:
+		case <-w.queue.ctx.Done():
 		case t.result <- err:
 		}
 	}
@@ -176,14 +174,9 @@ func (q *queue) processTaskResults() {
 				q.result <- err
 				finished = true
 			}
-		case <-q.done:
+		case <-q.ctx.Done():
 			finished = true
 		}
 	}
 	close(q.result)
-}
-
-func (q *queue) listenForStopping() {
-	<-q.stopCmd
-	close(q.done)
 }

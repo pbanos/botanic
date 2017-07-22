@@ -1,6 +1,7 @@
 package botanic
 
 import (
+	"context"
 	"fmt"
 	"math"
 )
@@ -24,12 +25,12 @@ contains samples that satisfy it.
 Its Samples method returns the samples it contains
 */
 type Set interface {
-	Entropy(Feature) (float64, error)
-	SubsetWith(FeatureCriterion) (Set, error)
-	FeatureValues(Feature) ([]interface{}, error)
-	CountFeatureValues(Feature) (map[string]int, error)
-	Samples() ([]Sample, error)
-	Count() (int, error)
+	Entropy(context.Context, Feature) (float64, error)
+	SubsetWith(context.Context, FeatureCriterion) (Set, error)
+	FeatureValues(context.Context, Feature) ([]interface{}, error)
+	CountFeatureValues(context.Context, Feature) (map[string]int, error)
+	Samples(context.Context) ([]Sample, error)
+	Count(context.Context) (int, error)
 }
 
 type memoryIntensiveSubsettingSet struct {
@@ -77,11 +78,11 @@ func NewCPUIntensiveSet(samples []Sample) Set {
 	return &cpuIntensiveSubsettingSet{samples, []FeatureCriterion{}}
 }
 
-func (s *memoryIntensiveSubsettingSet) Count() (int, error) {
+func (s *memoryIntensiveSubsettingSet) Count(ctx context.Context) (int, error) {
 	return len(s.samples), nil
 }
 
-func (s *cpuIntensiveSubsettingSet) Count() (int, error) {
+func (s *cpuIntensiveSubsettingSet) Count(ctx context.Context) (int, error) {
 	var length int
 	s.iterateOnSet(func(_ Sample) (bool, error) {
 		length++
@@ -90,7 +91,7 @@ func (s *cpuIntensiveSubsettingSet) Count() (int, error) {
 	return length, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) Entropy(f Feature) (float64, error) {
+func (s *memoryIntensiveSubsettingSet) Entropy(ctx context.Context, f Feature) (float64, error) {
 	var result float64
 	featureValueCounts := make(map[string]float64)
 	count := 0.0
@@ -112,7 +113,7 @@ func (s *memoryIntensiveSubsettingSet) Entropy(f Feature) (float64, error) {
 	return result, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) Entropy(f Feature) (float64, error) {
+func (s *cpuIntensiveSubsettingSet) Entropy(ctx context.Context, f Feature) (float64, error) {
 	var result float64
 	featureValueCounts := make(map[string]float64)
 	count := 0.0
@@ -138,7 +139,7 @@ func (s *cpuIntensiveSubsettingSet) Entropy(f Feature) (float64, error) {
 	return result, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) FeatureValues(f Feature) ([]interface{}, error) {
+func (s *memoryIntensiveSubsettingSet) FeatureValues(ctx context.Context, f Feature) ([]interface{}, error) {
 	result := []interface{}{}
 	encountered := make(map[string]bool)
 	for _, sample := range s.samples {
@@ -155,7 +156,7 @@ func (s *memoryIntensiveSubsettingSet) FeatureValues(f Feature) ([]interface{}, 
 	return result, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) FeatureValues(f Feature) ([]interface{}, error) {
+func (s *cpuIntensiveSubsettingSet) FeatureValues(ctx context.Context, f Feature) ([]interface{}, error) {
 	result := []interface{}{}
 	encountered := make(map[string]bool)
 	err := s.iterateOnSet(func(sample Sample) (bool, error) {
@@ -176,7 +177,7 @@ func (s *cpuIntensiveSubsettingSet) FeatureValues(f Feature) ([]interface{}, err
 	return result, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) SubsetWith(fc FeatureCriterion) (Set, error) {
+func (s *memoryIntensiveSubsettingSet) SubsetWith(ctx context.Context, fc FeatureCriterion) (Set, error) {
 	var samples []Sample
 	for _, sample := range s.samples {
 		ok, err := fc.SatisfiedBy(sample)
@@ -190,17 +191,17 @@ func (s *memoryIntensiveSubsettingSet) SubsetWith(fc FeatureCriterion) (Set, err
 	return &memoryIntensiveSubsettingSet{samples}, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) SubsetWith(fc FeatureCriterion) (Set, error) {
+func (s *cpuIntensiveSubsettingSet) SubsetWith(ctx context.Context, fc FeatureCriterion) (Set, error) {
 	criteria := []FeatureCriterion{fc}
 	criteria = append(criteria, s.criteria...)
 	return &cpuIntensiveSubsettingSet{s.samples, criteria}, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) Samples() ([]Sample, error) {
+func (s *memoryIntensiveSubsettingSet) Samples(ctx context.Context) ([]Sample, error) {
 	return s.samples, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) Samples() ([]Sample, error) {
+func (s *cpuIntensiveSubsettingSet) Samples(ctx context.Context) ([]Sample, error) {
 	var samples []Sample
 	err := s.iterateOnSet(func(sample Sample) (bool, error) {
 		samples = append(samples, sample)
@@ -212,7 +213,7 @@ func (s *cpuIntensiveSubsettingSet) Samples() ([]Sample, error) {
 	return samples, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) CountFeatureValues(f Feature) (map[string]int, error) {
+func (s *memoryIntensiveSubsettingSet) CountFeatureValues(ctx context.Context, f Feature) (map[string]int, error) {
 	result := make(map[string]int)
 	for _, sample := range s.samples {
 		v, err := sample.ValueFor(f)
@@ -225,7 +226,7 @@ func (s *memoryIntensiveSubsettingSet) CountFeatureValues(f Feature) (map[string
 	return result, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) CountFeatureValues(f Feature) (map[string]int, error) {
+func (s *cpuIntensiveSubsettingSet) CountFeatureValues(ctx context.Context, f Feature) (map[string]int, error) {
 	result := make(map[string]int)
 	err := s.iterateOnSet(func(sample Sample) (bool, error) {
 		v, err := sample.ValueFor(f)
@@ -243,12 +244,12 @@ func (s *cpuIntensiveSubsettingSet) CountFeatureValues(f Feature) (map[string]in
 }
 
 func (s *memoryIntensiveSubsettingSet) String() string {
-	count, _ := s.Count()
+	count, _ := s.Count(context.TODO())
 	return fmt.Sprintf("[ %v ]", count)
 }
 
 func (s *cpuIntensiveSubsettingSet) String() string {
-	count, _ := s.Count()
+	count, _ := s.Count(context.TODO())
 	return fmt.Sprintf("[ %v ]", count)
 }
 
