@@ -19,7 +19,6 @@ type queue struct {
 	results    chan error
 	wg         *sync.WaitGroup
 	result     chan error
-	stopCmd    chan struct{}
 }
 
 /*
@@ -65,8 +64,7 @@ func newQueue(ctx context.Context, workers int) *queue {
 	results := make(chan error)
 	wg := &sync.WaitGroup{}
 	result := make(chan error, 1)
-	stop := make(chan struct{})
-	q := &queue{wc, tasks, ctx, cancelFunc, results, wg, result, stop}
+	q := &queue{wc, tasks, ctx, cancelFunc, results, wg, result}
 	go q.run()
 	go q.processTaskResults()
 	for i := 0; i < workers; i++ {
