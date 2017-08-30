@@ -6,13 +6,13 @@ import (
 )
 
 /*
-Pruner is an interface wrappint the Prune method, that can be used
+Pruner is an interface wrapping the Prune method, that can be used
 to decide whether a partition is good enough to become part of a tree
 or if it must be pruned instead.
 
-The Prune method takes a set, a partition and a class Feature and returns
-boolean: true to indicate the partition must be pruned, false to allow its
-adding to the tree and further development.
+The Prune method takes a context, set, a partition and a class Feature and
+returns a boolean: true to indicate the partition must be pruned, false to
+allow its adding to the tree and further development.
 */
 type Pruner interface {
 	Prune(ctx context.Context, s Set, p *Partition, classFeature Feature) (bool, error)
@@ -25,8 +25,8 @@ the Pruner interface
 type PrunerFunc func(ctx context.Context, s Set, p *Partition, classFeature Feature) (bool, error)
 
 /*
-Prune takes a set, a partition and a class Feature and invokes the
-PrunerFunc with those parameters to return its boolean result.
+Prune takes a context.Context, a set, a partition and a class Feature and
+invokes the PrunerFunc with those parameters to return its boolean result.
 */
 func (pf PrunerFunc) Prune(ctx context.Context, s Set, p *Partition, classFeature Feature) (bool, error) {
 	return pf(ctx, s, p, classFeature)

@@ -62,8 +62,9 @@ func (pe PredictionError) Error() string {
 }
 
 /*
-NewTreeFromFeatureCriterion takes a FeatureCriterion, a set of data and a class Feature
-and returns a non-developed Tree for the subset of data satisfying the FeatureCriterion.
+NewTreeFromFeatureCriterion takes a context.Context, a FeatureCriterion, a set of data
+and a class Feature and returns a non-developed Tree for the subset of data satisfying
+the FeatureCriterion.
 */
 func NewTreeFromFeatureCriterion(ctx context.Context, fc FeatureCriterion, s Set) (*Tree, error) {
 	subset, err := s.SubsetWith(ctx, fc)
@@ -340,7 +341,7 @@ func (p *Prediction) UnmarshalJSON(b []byte) error {
 }
 
 /*
-Test takes a Set and a class Feature and returns three values:
+Test takes a context.Context, a Set and a class Feature and returns three values:
  * the prediction success rate of the tree over the given Set for the classFeature
  * the number of failing predictions for the set because of ErrCannotPredictFromSample errors
  * an error if a prediction could not be set for reasons other than the tree not

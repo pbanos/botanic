@@ -17,9 +17,9 @@ type Partition struct {
 }
 
 /*
-NewDiscretePartition takes a set, a discrete feature and a class feature
-and returns a partition of the set for the given feature. The result may be nil
-if the obtained information gain is considered insufficient
+NewDiscretePartition takes a context.Context, a set, a discrete feature and a class
+feature and returns a partition of the set for the given feature. The result may be
+nil if the obtained information gain is considered insufficient
 */
 func NewDiscretePartition(ctx context.Context, s Set, f *DiscreteFeature, classFeature Feature, p Pruner) (*Partition, error) {
 	availableValues := f.AvailableValues()
@@ -62,9 +62,9 @@ func NewDiscretePartition(ctx context.Context, s Set, f *DiscreteFeature, classF
 }
 
 /*
-NewContinuousPartition takes a set, a continuous feature and a class feature
-and returns a partition of the set for the given feature. The result may be nil
-if the obtained information gain is considered insufficient
+NewContinuousPartition takes a context.Context, a set, a continuous feature and
+a class feature and returns a partition of the set for the given feature. The
+result may be nil if the obtained information gain is considered insufficient
 */
 func NewContinuousPartition(ctx context.Context, s Set, f *ContinuousFeature, classFeature Feature, p Pruner) (*Partition, error) {
 	sEntropy, err := s.Entropy(ctx, classFeature)
@@ -141,6 +141,15 @@ func newRangePartition(ctx context.Context, s Set, f *ContinuousFeature, classFe
 	return result, nil
 }
 
+/*
+newContinuousPartition takes a context.Context, a set, a continuous feature,
+a class Feature, the entropy of the given set, an range of float64 numbers
+a-b and a pruner and returns a partition of the set for the given range or
+an error.
+The partition is built using newRangePartition to split the range into 2 ranges
+and then recursively call itself until the range can no longer be splitted or
+the pruner prunes the obtained range partition.
+*/
 func newContinuousPartition(ctx context.Context, s Set, f *ContinuousFeature, classFeature Feature, entropy, a, b float64, p Pruner) (*Partition, error) {
 	initialPartition, err := newRangePartition(ctx, s, f, classFeature, entropy, a, b)
 	if err != nil {

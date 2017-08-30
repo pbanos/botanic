@@ -8,7 +8,8 @@ import (
 /*
 Pot represents the context in which a tree is grown.
 
-Its Grow method takes a Set and returns a tree that predicts the set
+Its Grow method takes a context.Context, a Set and returns a tree
+that predicts the set
 */
 type Pot interface {
 	Grow(context.Context, Set) (*Tree, error)
