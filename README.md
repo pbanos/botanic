@@ -332,7 +332,6 @@ The project is curently very unstable and specifically the APIs exposed by the b
 
 These are the items planned for future development of the botanic toolf and libraries:
 
-- Add context.Context parameter to botanic interfaces' methods
 - Cache count and entropy of a set
 - Refactor tree into a collection of nodes
   * Refactor tree serialization to use an io.Writer and avoid whole in-memory keeping of the serialized tree
