@@ -30,6 +30,8 @@ type sqlSet struct {
 	inverseDiscreteValues map[string]int
 	dfColumns             []string
 	cfColumns             []string
+	count                 *int
+	entropy               *float64
 }
 
 /*
@@ -76,10 +78,20 @@ func CreateSet(ctx context.Context, dbAdapter Adapter, features []botanic.Featur
 }
 
 func (ss *sqlSet) Count(ctx context.Context) (int, error) {
-	return ss.db.CountSamples(ctx, ss.criteria)
+	if ss.count != nil {
+		return *ss.count, nil
+	}
+	result, err := ss.db.CountSamples(ctx, ss.criteria)
+	if err == nil {
+		ss.count = &result
+	}
+	return result, err
 }
 
 func (ss *sqlSet) Entropy(ctx context.Context, f botanic.Feature) (float64, error) {
+	if ss.entropy != nil {
+		return *ss.entropy, nil
+	}
 	var result, count float64
 	column, ok := ss.featureNamesColumns[f.Name()]
 	if !ok {
@@ -110,6 +122,7 @@ func (ss *sqlSet) Entropy(ctx context.Context, f botanic.Feature) (float64, erro
 			result -= probValue * math.Log(probValue)
 		}
 	}
+	ss.entropy = &result
 	return result, nil
 }
 
