@@ -13,16 +13,14 @@ import (
 )
 
 type predictCmdConfig struct {
-	treeInput      string
-	metadataInput  string
-	classFeature   string
+	*treeCmdConfig
 	undefinedValue string
 }
 
 type stdoutFeatureValueRequester string
 
-func predictCmd(rootConfig *rootCmdConfig) *cobra.Command {
-	config := &predictCmdConfig{}
+func predictCmd(treeConfig *treeCmdConfig) *cobra.Command {
+	config := &predictCmdConfig{treeCmdConfig: treeConfig}
 	cmd := &cobra.Command{
 		Use:   "predict",
 		Short: "Predict a value for a sample answering questions",
@@ -51,9 +49,7 @@ func predictCmd(rootConfig *rootCmdConfig) *cobra.Command {
 			fmt.Printf("Predicted values along their probabilities are %v\n", prediction)
 		},
 	}
-	cmd.PersistentFlags().StringVarP(&(config.metadataInput), "metadata", "m", "", "path to a YML file with metadata describing the different features available available on the input file (required)")
 	cmd.PersistentFlags().StringVarP(&(config.treeInput), "tree", "t", "", "path to a file from which the tree to test will be read and parsed as JSON (required)")
-	cmd.PersistentFlags().StringVarP(&(config.classFeature), "class-feature", "c", "", "name of the feature the generated tree should predict (required)")
 	cmd.PersistentFlags().StringVarP(&(config.undefinedValue), "undefined-value", "u", "?", "value to input to define a sample's value for a feature as undefined")
 	return cmd
 }
@@ -64,9 +60,6 @@ func (pcc *predictCmdConfig) Validate() error {
 	}
 	if pcc.treeInput == "" {
 		return fmt.Errorf("required tree flag was not set")
-	}
-	if pcc.classFeature == "" {
-		return fmt.Errorf("required class-feature flag was not set")
 	}
 	return nil
 }

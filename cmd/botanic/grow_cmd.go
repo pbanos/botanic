@@ -23,9 +23,8 @@ import (
 )
 
 type growCmdConfig struct {
-	*rootCmdConfig
+	*treeCmdConfig
 	dataInput          string
-	metadataInput      string
 	output             string
 	classFeature       string
 	pruneStrategy      string
@@ -35,8 +34,8 @@ type growCmdConfig struct {
 	ctx                context.Context
 }
 
-func growCmd(rootConfig *rootCmdConfig) *cobra.Command {
-	config := &growCmdConfig{rootCmdConfig: rootConfig}
+func growCmd(treeConfig *treeCmdConfig) *cobra.Command {
+	config := &growCmdConfig{treeCmdConfig: treeConfig}
 	cmd := &cobra.Command{
 		Use:   "grow",
 		Short: "Grow a tree from a set of data",
@@ -111,7 +110,6 @@ func growCmd(rootConfig *rootCmdConfig) *cobra.Command {
 		},
 	}
 	cmd.PersistentFlags().StringVarP(&(config.dataInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
-	cmd.PersistentFlags().StringVarP(&(config.metadataInput), "metadata", "m", "", "path to a YML file with metadata describing the different features available available on the input file (required)")
 	cmd.PersistentFlags().StringVarP(&(config.output), "output", "o", "", "path to a file to which the generated tree will be written in JSON format (defaults to STDOUT)")
 	cmd.PersistentFlags().StringVarP(&(config.classFeature), "class-feature", "c", "", "name of the feature the generated tree should predict (required)")
 	cmd.PersistentFlags().StringVarP(&(config.pruneStrategy), "prune", "p", "default", "pruning strategy to apply, the following are valid: default, minimum-information-gain:[VALUE], none")

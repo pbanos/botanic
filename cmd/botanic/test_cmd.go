@@ -13,23 +13,16 @@ import (
 	"github.com/pbanos/botanic/set/sqlset"
 	"github.com/pbanos/botanic/set/sqlset/pgadapter"
 	"github.com/pbanos/botanic/set/sqlset/sqlite3adapter"
-	"github.com/pbanos/botanic/tree"
-	"github.com/pbanos/botanic/tree/json"
 	"github.com/spf13/cobra"
 )
 
 type testCmdConfig struct {
-	*rootCmdConfig
-	treeInput     string
-	dataInput     string
-	metadataInput string
-	classFeature  string
-	ctx           context.Context
-	cancelFunc    context.CancelFunc
+	*treeCmdConfig
+	dataInput string
 }
 
-func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
-	config := &testCmdConfig{rootCmdConfig: rootConfig}
+func testCmd(treeConfig *treeCmdConfig) *cobra.Command {
+	config := &testCmdConfig{treeCmdConfig: treeConfig}
 	cmd := &cobra.Command{
 		Use:   "test",
 		Short: "Test the performance of a tree",
@@ -62,20 +55,18 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintf(os.Stderr, "counting testing set samples: %v\n", err)
 				os.Exit(5)
 			}
-			rootConfig.Logf("Testing tree against testset with %d samples...", count)
+			config.Logf("Testing tree against testset with %d samples...", count)
 			successRate, errorCount, err := tree.Test(config.Context(), testingSet)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "testing tree: %v\n", err)
 				os.Exit(6)
 			}
-			rootConfig.Logf("Done")
+			config.Logf("Done")
 			fmt.Printf("%f success rate, failed to make a prediction for %d samples\n", successRate, errorCount)
 		},
 	}
 	cmd.PersistentFlags().StringVarP(&(config.dataInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
-	cmd.PersistentFlags().StringVarP(&(config.metadataInput), "metadata", "m", "", "path to a YML file with metadata describing the different features available available on the input file (required)")
 	cmd.PersistentFlags().StringVarP(&(config.treeInput), "tree", "t", "", "path to a file from which the tree to test will be read and parsed as JSON (required)")
-	cmd.PersistentFlags().StringVarP(&(config.classFeature), "class-feature", "c", "", "name of the feature the generated tree should predict (required)")
 	return cmd
 }
 
@@ -85,9 +76,6 @@ func (tcc *testCmdConfig) Validate() error {
 	}
 	if tcc.metadataInput == "" {
 		return fmt.Errorf("required metadata flag was not set")
-	}
-	if tcc.classFeature == "" {
-		return fmt.Errorf("required class-feature flag was not set")
 	}
 	return nil
 }
@@ -138,34 +126,4 @@ func (tcc *testCmdConfig) PostgreSQLTestingSet(features []feature.Feature) (set.
 	}
 	tcc.Logf("Opening set over PostgreSQL adapter for url %s to read testing set...", tcc.dataInput)
 	return sqlset.OpenSet(tcc.Context(), adapter, features)
-}
-
-func (tcc *testCmdConfig) Context() context.Context {
-	tcc.setContextAndCancelFunc()
-	return tcc.ctx
-}
-
-func (tcc *testCmdConfig) ContextCancelFunc() context.CancelFunc {
-	tcc.setContextAndCancelFunc()
-	return tcc.cancelFunc
-}
-
-func (tcc *testCmdConfig) setContextAndCancelFunc() {
-	if tcc.ctx == nil {
-		tcc.ctx, tcc.cancelFunc = context.WithCancel(context.Background())
-	}
-}
-
-func loadTree(ctx context.Context, filepath string, features []feature.Feature) (*tree.Tree, error) {
-	f, err := os.Open(filepath)
-	if err != nil {
-		return nil, fmt.Errorf("reading tree in JSON from %s: %v", filepath, err)
-	}
-	defer f.Close()
-	t := &tree.Tree{NodeStore: tree.NewMemoryNodeStore()}
-	err = json.ReadJSONTree(ctx, t, features, f)
-	if err != nil {
-		err = fmt.Errorf("parsing tree in JSON from %s: %v", filepath, err)
-	}
-	return t, err
 }
