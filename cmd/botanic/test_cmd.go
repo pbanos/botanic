@@ -6,11 +6,15 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pbanos/botanic/pkg/bio"
-	"github.com/pbanos/botanic/pkg/bio/sql"
-	"github.com/pbanos/botanic/pkg/bio/sql/pgadapter"
-	"github.com/pbanos/botanic/pkg/bio/sql/sqlite3adapter"
-	"github.com/pbanos/botanic/pkg/botanic"
+	"github.com/pbanos/botanic/feature"
+	"github.com/pbanos/botanic/feature/yaml"
+	"github.com/pbanos/botanic/set"
+	"github.com/pbanos/botanic/set/csv"
+	"github.com/pbanos/botanic/set/sqlset"
+	"github.com/pbanos/botanic/set/sqlset/pgadapter"
+	"github.com/pbanos/botanic/set/sqlset/sqlite3adapter"
+	"github.com/pbanos/botanic/tree"
+	"github.com/pbanos/botanic/tree/json"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +41,7 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				os.Exit(1)
 			}
 			config.Context()
-			features, err := bio.ReadYMLFeaturesFromFile(config.metadataInput)
+			features, err := yaml.ReadFeaturesFromFile(config.metadataInput)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(2)
@@ -48,20 +52,7 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(4)
 			}
-
-			var classFeature botanic.Feature
-			for i, f := range features {
-				if f.Name() == config.classFeature {
-					classFeature = f
-					features[i], features[len(features)-1] = features[len(features)-1], features[i]
-					break
-				}
-			}
-			if classFeature == nil {
-				fmt.Fprintf(os.Stderr, "class feature '%s' is not defined\n", config.classFeature)
-				os.Exit(5)
-			}
-			tree, err := loadTree(config.treeInput)
+			tree, err := loadTree(context.Background(), config.treeInput, features)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(4)
@@ -72,7 +63,7 @@ func testCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				os.Exit(5)
 			}
 			rootConfig.Logf("Testing tree against testset with %d samples...", count)
-			successRate, errorCount, err := tree.Test(config.Context(), testingSet, classFeature)
+			successRate, errorCount, err := tree.Test(config.Context(), testingSet)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "testing tree: %v\n", err)
 				os.Exit(6)
@@ -101,7 +92,7 @@ func (tcc *testCmdConfig) Validate() error {
 	return nil
 }
 
-func (tcc *testCmdConfig) testingSet(features []botanic.Feature) (botanic.Set, error) {
+func (tcc *testCmdConfig) testingSet(features []feature.Feature) (set.Set, error) {
 	var f *os.File
 	if tcc.dataInput == "" {
 		tcc.Logf("Reading testing set from STDIN...")
@@ -122,31 +113,31 @@ func (tcc *testCmdConfig) testingSet(features []botanic.Feature) (botanic.Set, e
 		}
 		defer f.Close()
 	}
-	testingSet, err := bio.ReadCSVSet(f, features, botanic.NewSet)
+	testingSet, err := csv.ReadSet(f, features, set.New)
 	if err != nil {
 		return nil, fmt.Errorf("reading testing set: %v", err)
 	}
 	return testingSet, nil
 }
 
-func (tcc *testCmdConfig) Sqlite3TestingSet(features []botanic.Feature) (botanic.Set, error) {
+func (tcc *testCmdConfig) Sqlite3TestingSet(features []feature.Feature) (set.Set, error) {
 	tcc.Logf("Creating SQLite3 adapter for file %s to read testing set...", tcc.dataInput)
 	adapter, err := sqlite3adapter.New(tcc.dataInput, 0)
 	if err != nil {
 		return nil, err
 	}
 	tcc.Logf("Opening set over SQLite3 adapter for file %s to read testing set...", tcc.dataInput)
-	return sql.OpenSet(tcc.Context(), adapter, features)
+	return sqlset.OpenSet(tcc.Context(), adapter, features)
 }
 
-func (tcc *testCmdConfig) PostgreSQLTestingSet(features []botanic.Feature) (botanic.Set, error) {
+func (tcc *testCmdConfig) PostgreSQLTestingSet(features []feature.Feature) (set.Set, error) {
 	tcc.Logf("Creating PostgreSQL adapter for url %s to read testing set...", tcc.dataInput)
 	adapter, err := pgadapter.New(tcc.dataInput)
 	if err != nil {
 		return nil, err
 	}
 	tcc.Logf("Opening set over PostgreSQL adapter for url %s to read testing set...", tcc.dataInput)
-	return sql.OpenSet(tcc.Context(), adapter, features)
+	return sqlset.OpenSet(tcc.Context(), adapter, features)
 }
 
 func (tcc *testCmdConfig) Context() context.Context {
@@ -165,13 +156,14 @@ func (tcc *testCmdConfig) setContextAndCancelFunc() {
 	}
 }
 
-func loadTree(filepath string) (*botanic.Tree, error) {
+func loadTree(ctx context.Context, filepath string, features []feature.Feature) (*tree.Tree, error) {
 	f, err := os.Open(filepath)
 	if err != nil {
 		return nil, fmt.Errorf("reading tree in JSON from %s: %v", filepath, err)
 	}
 	defer f.Close()
-	t, err := bio.ReadJSONTree(f)
+	t := &tree.Tree{NodeStore: tree.NewMemoryNodeStore()}
+	err = json.ReadJSONTree(ctx, t, features, f)
 	if err != nil {
 		err = fmt.Errorf("parsing tree in JSON from %s: %v", filepath, err)
 	}

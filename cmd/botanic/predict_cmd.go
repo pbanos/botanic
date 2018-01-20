@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
-	"github.com/pbanos/botanic/pkg/bio"
-	"github.com/pbanos/botanic/pkg/botanic"
+	"github.com/pbanos/botanic/feature"
+	"github.com/pbanos/botanic/feature/yaml"
+	"github.com/pbanos/botanic/set/inputsample"
+	"github.com/pbanos/botanic/tree"
 	"github.com/spf13/cobra"
 )
 
@@ -30,17 +33,17 @@ func predictCmd(rootConfig *rootCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			features, err := bio.ReadYMLFeaturesFromFile(config.metadataInput)
+			features, err := yaml.ReadFeaturesFromFile(config.metadataInput)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(2)
 			}
-			tree, err := loadTree(config.treeInput)
+			tree, err := loadTree(context.Background(), config.treeInput, features)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(3)
 			}
-			prediction, err := predict(tree, features, config.undefinedValue)
+			prediction, err := predict(context.Background(), tree, features, config.undefinedValue)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(4)
@@ -68,16 +71,16 @@ func (pcc *predictCmdConfig) Validate() error {
 	return nil
 }
 
-func predict(tree *botanic.Tree, features []botanic.Feature, undefinedValue string) (*botanic.Prediction, error) {
-	sample := bio.NewReadSample(os.Stdin, features, stdoutFeatureValueRequester(undefinedValue), undefinedValue)
-	return tree.Predict(sample)
+func predict(ctx context.Context, tree *tree.Tree, features []feature.Feature, undefinedValue string) (*tree.Prediction, error) {
+	sample := inputsample.New(os.Stdin, features, stdoutFeatureValueRequester(undefinedValue), undefinedValue)
+	return tree.Predict(ctx, sample)
 }
 
-func (sfvr stdoutFeatureValueRequester) RequestValueFor(f botanic.Feature) error {
+func (sfvr stdoutFeatureValueRequester) RequestValueFor(f feature.Feature) error {
 	switch f := f.(type) {
-	case *botanic.DiscreteFeature:
+	case *feature.DiscreteFeature:
 		fmt.Printf("Please provide the sample's %s:\n(valid values are %v or %s if undefined)\n", f.Name(), f.AvailableValues(), string(sfvr))
-	case *botanic.ContinuousFeature:
+	case *feature.ContinuousFeature:
 		fmt.Printf("Please provide the sample's %s:\n(valid values are real numbers or %s if undefined)\n", f.Name(), string(sfvr))
 	default:
 		return fmt.Errorf("unknown feature type %T", f)
@@ -85,11 +88,11 @@ func (sfvr stdoutFeatureValueRequester) RequestValueFor(f botanic.Feature) error
 	return nil
 }
 
-func (sfvr stdoutFeatureValueRequester) RejectValueFor(f botanic.Feature, value interface{}) error {
+func (sfvr stdoutFeatureValueRequester) RejectValueFor(f feature.Feature, value interface{}) error {
 	switch f := f.(type) {
-	case *botanic.DiscreteFeature:
+	case *feature.DiscreteFeature:
 		fmt.Printf("%v is not a valid value for the sample's %s. Please provide one of %v or %s if undefined.\n", value, f.Name(), f.AvailableValues(), string(sfvr))
-	case *botanic.ContinuousFeature:
+	case *feature.ContinuousFeature:
 		fmt.Printf("%v is not a valid value for the sample's %s. Please provide a real number or %s if undefined.\n", value, f.Name(), string(sfvr))
 	default:
 		return fmt.Errorf("unknown feature type %T", f)

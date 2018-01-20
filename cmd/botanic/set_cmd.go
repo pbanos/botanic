@@ -6,11 +6,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pbanos/botanic/pkg/bio"
-	"github.com/pbanos/botanic/pkg/bio/sql"
-	"github.com/pbanos/botanic/pkg/bio/sql/pgadapter"
-	"github.com/pbanos/botanic/pkg/bio/sql/sqlite3adapter"
-	"github.com/pbanos/botanic/pkg/botanic"
+	"github.com/pbanos/botanic/feature"
+	"github.com/pbanos/botanic/feature/yaml"
+	"github.com/pbanos/botanic/set"
+	"github.com/pbanos/botanic/set/csv"
+	"github.com/pbanos/botanic/set/sqlset"
+	"github.com/pbanos/botanic/set/sqlset/pgadapter"
+	"github.com/pbanos/botanic/set/sqlset/sqlite3adapter"
 	"github.com/spf13/cobra"
 )
 
@@ -24,7 +26,7 @@ type setCmdConfig struct {
 }
 
 type sampleWriter interface {
-	Write(context.Context, []botanic.Sample) (int, error)
+	Write(context.Context, []set.Sample) (int, error)
 }
 
 type writableSet interface {
@@ -50,7 +52,7 @@ func setCmd(rootConfig *rootCmdConfig) *cobra.Command {
 			}
 			config.Context()
 			config.Logf("Reading features from metadata at %s...", config.metadataInput)
-			features, err := bio.ReadYMLFeaturesFromFile(config.metadataInput)
+			features, err := yaml.ReadFeaturesFromFile(config.metadataInput)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(2)
@@ -70,7 +72,7 @@ func setCmd(rootConfig *rootCmdConfig) *cobra.Command {
 			}
 
 			for s := range inputStream {
-				_, err = output.Write(config.Context(), []botanic.Sample{s})
+				_, err = output.Write(config.Context(), []set.Sample{s})
 				if err != nil {
 					config.ContextCancelFunc()
 					break
@@ -108,7 +110,7 @@ func (scc *setCmdConfig) Validate() error {
 	return nil
 }
 
-func (scc *setCmdConfig) OutputWriter(features []botanic.Feature) (writableSet, error) {
+func (scc *setCmdConfig) OutputWriter(features []feature.Feature) (writableSet, error) {
 	var outputFile *os.File
 	var err error
 	if scc.setOutput != "" {
@@ -128,14 +130,14 @@ func (scc *setCmdConfig) OutputWriter(features []botanic.Feature) (writableSet, 
 		outputFile = os.Stdout
 	}
 	scc.Logf("Preparing to write output set...")
-	output, err := bio.NewCSVWriter(outputFile, features)
+	output, err := csv.NewWriter(outputFile, features)
 	if err != nil {
 		return nil, err
 	}
 	return output, nil
 }
 
-func (scc *setCmdConfig) InputStream(features []botanic.Feature) (<-chan botanic.Sample, <-chan error, error) {
+func (scc *setCmdConfig) InputStream(features []feature.Feature) (<-chan set.Sample, <-chan error, error) {
 	var f *os.File
 	if scc.setInput == "" {
 		scc.Logf("Reading input set from STDIN and dumping it into output set...")
@@ -156,11 +158,11 @@ func (scc *setCmdConfig) InputStream(features []botanic.Feature) (<-chan botanic
 		}
 		scc.Logf("Dumping input set into output set...")
 	}
-	sampleStream := make(chan botanic.Sample)
+	sampleStream := make(chan set.Sample)
 	errStream := make(chan error)
 	go func() {
 		defer f.Close()
-		err := bio.ReadCSVSetBySample(f, features, func(i int, s botanic.Sample) (bool, error) {
+		err := csv.ReadSetBySample(f, features, func(i int, s set.Sample) (bool, error) {
 			select {
 			case <-scc.Context().Done():
 				return false, nil
@@ -181,14 +183,14 @@ func (scc *setCmdConfig) InputStream(features []botanic.Feature) (<-chan botanic
 	return sampleStream, errStream, nil
 }
 
-func (scc *setCmdConfig) Sqlite3InputStream(features []botanic.Feature) (<-chan botanic.Sample, <-chan error, error) {
+func (scc *setCmdConfig) Sqlite3InputStream(features []feature.Feature) (<-chan set.Sample, <-chan error, error) {
 	scc.Logf("Creating SQLite3 adapter for file %s to read input set...", scc.setInput)
 	adapter, err := sqlite3adapter.New(scc.setInput, 0)
 	if err != nil {
 		return nil, nil, err
 	}
 	scc.Logf("Opening set over SQLite3 adapter for file %s to read input set...", scc.setInput)
-	set, err := sql.OpenSet(scc.Context(), adapter, features)
+	set, err := sqlset.OpenSet(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -196,14 +198,14 @@ func (scc *setCmdConfig) Sqlite3InputStream(features []botanic.Feature) (<-chan 
 	return sampleStream, errStream, nil
 }
 
-func (scc *setCmdConfig) PostgreSQLInputStream(features []botanic.Feature) (<-chan botanic.Sample, <-chan error, error) {
+func (scc *setCmdConfig) PostgreSQLInputStream(features []feature.Feature) (<-chan set.Sample, <-chan error, error) {
 	scc.Logf("Creating PostgreSQL adapter for url %s to read input set...", scc.setInput)
 	adapter, err := pgadapter.New(scc.setInput)
 	if err != nil {
 		return nil, nil, err
 	}
 	scc.Logf("Opening set over PostgreSQL adapter for url %s to read input set...", scc.setInput)
-	set, err := sql.OpenSet(scc.Context(), adapter, features)
+	set, err := sqlset.OpenSet(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -211,28 +213,28 @@ func (scc *setCmdConfig) PostgreSQLInputStream(features []botanic.Feature) (<-ch
 	return sampleStream, errStream, nil
 }
 
-func (scc *setCmdConfig) Sqlite3OutputWriter(features []botanic.Feature) (writableSet, error) {
+func (scc *setCmdConfig) Sqlite3OutputWriter(features []feature.Feature) (writableSet, error) {
 	scc.Logf("Creating SQLite3 adapter for file %s to dump output set...", scc.setOutput)
 	adapter, err := sqlite3adapter.New(scc.setOutput, 0)
 	if err != nil {
 		return nil, err
 	}
 	scc.Logf("Opening set over SQLite3 adapter for file %s to dump output set...", scc.setOutput)
-	set, err := sql.CreateSet(scc.Context(), adapter, features)
+	set, err := sqlset.CreateSet(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, err
 	}
 	return &flushableSampleWriter{set}, nil
 }
 
-func (scc *setCmdConfig) PostgreSQLOutputWriter(features []botanic.Feature) (writableSet, error) {
+func (scc *setCmdConfig) PostgreSQLOutputWriter(features []feature.Feature) (writableSet, error) {
 	scc.Logf("Creating PostgreSQL adapter for url %s to dump output set...", scc.setOutput)
 	adapter, err := pgadapter.New(scc.setOutput)
 	if err != nil {
 		return nil, err
 	}
 	scc.Logf("Opening set over PostgreSQL adapter for url %s to dump output set...", scc.setOutput)
-	set, err := sql.CreateSet(scc.Context(), adapter, features)
+	set, err := sqlset.CreateSet(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, err
 	}

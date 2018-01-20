@@ -20,6 +20,8 @@ func (rcc *rootCmdConfig) Logf(format string, a ...interface{}) {
 }
 
 func main() {
+	//defer profile.Start(profile.MemProfile).Stop()
+	//defer profile.Start(profile.CPUProfile).Stop()
 	if err := cliParser().Execute(); err != nil {
 		os.Exit(1)
 	}
