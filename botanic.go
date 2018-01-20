@@ -42,13 +42,19 @@ func Seed(ctx context.Context, classFeature feature.Feature, features []feature.
 // develops the node in the task using the task's set and available
 // feature to predict the tree's class feature and returns a set of
 // tasks to develop the resulting children nodes or an error.
-func BranchOut(ctx context.Context, task *queue.Task, t *tree.Tree, ps *PruningStrategy) ([]*queue.Task, error) {
+func BranchOut(ctx context.Context, task *queue.Task, t *tree.Tree, ps *PruningStrategy) (tasks []*queue.Task, e error) {
 	prediction, err := tree.NewPredictionFromSet(ctx, task.Set, t.ClassFeature)
 	if err != nil {
 		if err != tree.ErrCannotPredictFromEmptySet {
 			return nil, err
 		}
 	}
+	defer func() {
+		err = t.NodeStore.Store(ctx, task.Node)
+		if e == nil {
+			e = err
+		}
+	}()
 	task.Node.Prediction = prediction
 	sEntropy, err := task.Set.Entropy(ctx, t.ClassFeature)
 	if err != nil {
@@ -90,10 +96,6 @@ func BranchOut(ctx context.Context, task *queue.Task, t *tree.Tree, ps *PruningS
 		st.AvailableFeatures = stAvailableFeatures
 	}
 	task.Node.SubtreeIDs = stNodeIDs
-	err = t.NodeStore.Store(ctx, task.Node)
-	if err != nil {
-		return nil, err
-	}
 	return selectedPartition.Tasks, nil
 }
 

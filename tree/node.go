@@ -1,6 +1,8 @@
 package tree
 
 import (
+	"fmt"
+
 	"github.com/pbanos/botanic/feature"
 )
 
@@ -30,4 +32,15 @@ type Node struct {
 	// below, whereas for fully-grown trees it is the feature to ask about next on the
 	// sample being predicted or tested against.
 	SubtreeFeature feature.Feature
+}
+
+func (n *Node) String() string {
+	result := fmt.Sprintf("[%s]", n.ID)
+	if n.FeatureCriterion != nil {
+		result = fmt.Sprintf("%s{ %v }", result, n.FeatureCriterion)
+	}
+	if n.Prediction != nil {
+		result = fmt.Sprintf("%s{ %v }", result, n.Prediction)
+	}
+	return result
 }
