@@ -51,9 +51,6 @@ type Queue interface {
 
 type memQueue struct {
 	pendingTasks []*Task
-	head         int
-	tail         int
-	pending      int
 	runningTasks map[string]*Task
 	lock         *sync.RWMutex
 	ctx          context.Context
@@ -109,13 +106,12 @@ func (mq *memQueue) Push(ctx context.Context, t *Task) error {
 func (mq *memQueue) Pull(ctx context.Context) (*Task, context.Context, error) {
 	var task *Task
 	err := mq.withLock(ctx, func(ctx context.Context) error {
-		if mq.pending == 0 {
+		if len(mq.pendingTasks) == 0 {
 			return nil
 		}
-		mq.pending--
-		task = mq.pendingTasks[mq.head]
-		mq.pendingTasks[mq.head] = nil
-		mq.head = (mq.head + 1) % len(mq.pendingTasks)
+		task = mq.pendingTasks[len(mq.pendingTasks)-1]
+		mq.pendingTasks[len(mq.pendingTasks)-1] = nil
+		mq.pendingTasks = mq.pendingTasks[:len(mq.pendingTasks)-1]
 		mq.runningTasks[task.ID()] = task
 		return nil
 	})
@@ -150,7 +146,7 @@ func (mq *memQueue) Complete(ctx context.Context, id string) error {
 func (mq *memQueue) Count(ctx context.Context) (int, int, error) {
 	var pending, running int
 	err := mq.withRLock(ctx, func(ctx context.Context) error {
-		pending = mq.pending
+		pending = len(mq.pendingTasks)
 		running = len(mq.runningTasks)
 		return nil
 	})
@@ -166,27 +162,11 @@ func (mq *memQueue) Stop(ctx context.Context) error {
 }
 
 func (mq *memQueue) String() string {
-	return fmt.Sprintf("{Queue pending: %d (%v head:%d tail:%d)", mq.pending, mq.pendingTasks, mq.head, mq.tail)
+	return fmt.Sprintf("{Queue pending: %d (%v)", len(mq.pendingTasks), mq.pendingTasks)
 }
 
 func (mq *memQueue) push(t *Task) {
-	if mq.pending == len(mq.pendingTasks) {
-		mq.reorder()
-		mq.pendingTasks = append(mq.pendingTasks, t)
-	} else {
-		mq.pendingTasks[mq.tail] = t
-		mq.tail = (mq.tail + 1) % len(mq.pendingTasks)
-	}
-	mq.pending++
-}
-
-func (mq *memQueue) reorder() {
-	if mq.head == 0 {
-		return
-	}
-	mq.pendingTasks = append(mq.pendingTasks[mq.head:], mq.pendingTasks[0:mq.head]...)
-	mq.head = 0
-	mq.tail = mq.pending % len(mq.pendingTasks)
+	mq.pendingTasks = append(mq.pendingTasks, t)
 }
 
 func (mq *memQueue) withLock(ctx context.Context, f func(ctx context.Context) error) error {
