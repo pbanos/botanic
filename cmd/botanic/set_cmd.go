@@ -190,7 +190,7 @@ func (scc *setCmdConfig) Sqlite3InputStream(features []feature.Feature) (<-chan 
 		return nil, nil, err
 	}
 	scc.Logf("Opening set over SQLite3 adapter for file %s to read input set...", scc.setInput)
-	set, err := sqlset.OpenSet(scc.Context(), adapter, features)
+	set, err := sqlset.Open(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -205,7 +205,7 @@ func (scc *setCmdConfig) PostgreSQLInputStream(features []feature.Feature) (<-ch
 		return nil, nil, err
 	}
 	scc.Logf("Opening set over PostgreSQL adapter for url %s to read input set...", scc.setInput)
-	set, err := sqlset.OpenSet(scc.Context(), adapter, features)
+	set, err := sqlset.Open(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -220,7 +220,7 @@ func (scc *setCmdConfig) Sqlite3OutputWriter(features []feature.Feature) (writab
 		return nil, err
 	}
 	scc.Logf("Opening set over SQLite3 adapter for file %s to dump output set...", scc.setOutput)
-	set, err := sqlset.CreateSet(scc.Context(), adapter, features)
+	set, err := sqlset.Create(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +234,7 @@ func (scc *setCmdConfig) PostgreSQLOutputWriter(features []feature.Feature) (wri
 		return nil, err
 	}
 	scc.Logf("Opening set over PostgreSQL adapter for url %s to dump output set...", scc.setOutput)
-	set, err := sqlset.CreateSet(scc.Context(), adapter, features)
+	set, err := sqlset.Create(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, err
 	}

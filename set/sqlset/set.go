@@ -36,7 +36,7 @@ type sqlSet struct {
 }
 
 /*
-OpenSet takes an Adapter to a db backend and a slice of feature.Feature
+Open takes an Adapter to a db backend and a slice of feature.Feature
 and returns a Set backed by the given adapter or an error if no set is
 available through the given adapter.
 
@@ -44,7 +44,7 @@ This function expects the adapter to have the samples and discrete value
 tables already created, and the discrete value table initialized with all
 the values of the discrete features in the features slice.
 */
-func OpenSet(ctx context.Context, dbAdapter Adapter, features []feature.Feature) (Set, error) {
+func Open(ctx context.Context, dbAdapter Adapter, features []feature.Feature) (Set, error) {
 	ss := &sqlSet{db: dbAdapter, features: features}
 	err := ss.initFeatureColumns()
 	if err != nil {
@@ -58,14 +58,14 @@ func OpenSet(ctx context.Context, dbAdapter Adapter, features []feature.Feature)
 }
 
 /*
-CreateSet takes an Adapter and a slice of feature.Feature and returns a Set
+Create takes an Adapter and a slice of feature.Feature and returns a Set
 backed by the given adapter or an error.
 
 This function will ensure that the samples and discrete value tables are
 created on the database, and that the discrete value table has all the
 values for the discrete features on the features slice.
 */
-func CreateSet(ctx context.Context, dbAdapter Adapter, features []feature.Feature) (Set, error) {
+func Create(ctx context.Context, dbAdapter Adapter, features []feature.Feature) (Set, error) {
 	ss := &sqlSet{db: dbAdapter, features: features}
 	err := ss.initFeatureColumns()
 	if err != nil {

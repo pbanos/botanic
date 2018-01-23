@@ -152,7 +152,7 @@ func (scc *splitCmdConfig) Sqlite3SplitOutputWriter(features []feature.Feature) 
 		return nil, err
 	}
 	scc.Logf("Opening set over SQLite3 adapter for file %s to dump split set...", scc.splitOutput)
-	set, err := sqlset.CreateSet(scc.Context(), adapter, features)
+	set, err := sqlset.Create(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (scc *splitCmdConfig) PostgreSQLSplitOutputWriter(features []feature.Featur
 		return nil, err
 	}
 	scc.Logf("Opening set over PostgreSQL adapter for url %s to dump split set...", scc.splitOutput)
-	set, err := sqlset.CreateSet(scc.Context(), adapter, features)
+	set, err := sqlset.Create(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, err
 	}

@@ -82,6 +82,7 @@ func (mns *memoryNodeStore) Store(ctx context.Context, n *Node) error {
 		return nil
 	})
 }
+
 func (mns *memoryNodeStore) Get(ctx context.Context, id string) (*Node, error) {
 	var n *Node
 	err := mns.withRLock(ctx, func(ctx context.Context) error {

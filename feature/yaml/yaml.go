@@ -1,3 +1,7 @@
+/*
+Package yaml provides methods to parse feature.Feature specifications
+also known as metadata, from YAML documents.
+*/
 package yaml
 
 import (

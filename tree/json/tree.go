@@ -11,6 +11,17 @@ import (
 	"github.com/pbanos/botanic/tree"
 )
 
+/*
+WriteJSONTree takes a context.Context, a pointer to a tree.Tree and an
+io.Writer and serializes the given tree as JSON onto the io.Writer.
+A tree is serialized as a JSON object with the following fields:
+* "rootID": a string with the ID of the node at the root of the tree
+* "classFeature": a string with the name of the feature the tree predicts
+* "nodes": an array containing the nodes that can be traversed on the tree
+  serialized by MarshalJSONNode.
+An error is returned if the tree cannot be traversed, serialized or written
+onto the io.Writer.
+*/
 func WriteJSONTree(ctx context.Context, t *tree.Tree, w io.Writer) error {
 	err := marshalJSONTreeHeader(ctx, t, w)
 	if err != nil {
@@ -28,6 +39,18 @@ func WriteJSONTree(ctx context.Context, t *tree.Tree, w io.Writer) error {
 	return marshalJSONTreeFooter(ctx, t, w)
 }
 
+/*
+ReadJSONTree takes a context.Context, a pointer to a tree.Tree and an
+io.Reader and unmarshals the contents of the io.Reader onto the given
+tree.
+A tree is expected to be a JSON object with the following fields:
+* "rootID": a string with the ID of the node at the root of the tree
+* "classFeature": a string with the name of the feature the tree predicts
+* "nodes": an array containing the nodes that can be traversed on the tree
+  unmarshalled by UnmarshalJSONNodeWithFeatures.
+An error is returned if the JSON cannot be read from the io.Reader or
+unmarshalled onto the tree.
+*/
 func ReadJSONTree(ctx context.Context, t *tree.Tree, features []feature.Feature, r io.Reader) error {
 	dec := json.NewDecoder(r)
 	jt := &struct {

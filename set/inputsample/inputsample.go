@@ -1,3 +1,7 @@
+/*
+Package inputsample provides an implementation of set.Sample that is read
+from an io.Reader.
+*/
 package inputsample
 
 import (

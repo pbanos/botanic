@@ -115,7 +115,7 @@ func (tcc *testCmdConfig) Sqlite3TestingSet(features []feature.Feature) (set.Set
 		return nil, err
 	}
 	tcc.Logf("Opening set over SQLite3 adapter for file %s to read testing set...", tcc.dataInput)
-	return sqlset.OpenSet(tcc.Context(), adapter, features)
+	return sqlset.Open(tcc.Context(), adapter, features)
 }
 
 func (tcc *testCmdConfig) PostgreSQLTestingSet(features []feature.Feature) (set.Set, error) {
@@ -125,5 +125,5 @@ func (tcc *testCmdConfig) PostgreSQLTestingSet(features []feature.Feature) (set.
 		return nil, err
 	}
 	tcc.Logf("Opening set over PostgreSQL adapter for url %s to read testing set...", tcc.dataInput)
-	return sqlset.OpenSet(tcc.Context(), adapter, features)
+	return sqlset.Open(tcc.Context(), adapter, features)
 }

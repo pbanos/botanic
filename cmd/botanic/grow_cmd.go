@@ -180,7 +180,7 @@ func (gcc *growCmdConfig) Sqlite3TrainingSet(features []feature.Feature) (set.Se
 		return nil, err
 	}
 	gcc.Logf("Opening set over SQLite3 adapter for file %s to read training set...", gcc.dataInput)
-	return sqlset.OpenSet(gcc.Context(), adapter, features)
+	return sqlset.Open(gcc.Context(), adapter, features)
 }
 
 func (gcc *growCmdConfig) PostgreSQLTrainingSet(features []feature.Feature) (set.Set, error) {
@@ -190,7 +190,7 @@ func (gcc *growCmdConfig) PostgreSQLTrainingSet(features []feature.Feature) (set
 		return nil, err
 	}
 	gcc.Logf("Opening set over PostgreSQL adapter for url %s to read training set...", gcc.dataInput)
-	return sqlset.OpenSet(gcc.Context(), adapter, features)
+	return sqlset.Open(gcc.Context(), adapter, features)
 }
 
 func (gcc *growCmdConfig) Context() context.Context {

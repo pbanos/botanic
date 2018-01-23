@@ -56,11 +56,19 @@ type memQueue struct {
 	pending      int
 	runningTasks map[string]*Task
 	lock         *sync.RWMutex
+	ctx          context.Context
+	ctxCancel    context.CancelFunc
 }
 
 // New returns a queue backed only by the process memory
 func New() Queue {
-	return &memQueue{runningTasks: make(map[string]*Task), lock: &sync.RWMutex{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &memQueue{
+		runningTasks: make(map[string]*Task),
+		lock:         &sync.RWMutex{},
+		ctx:          ctx,
+		ctxCancel:    cancel,
+	}
 }
 
 // WaitFor takes a context and a queue and waits for
@@ -117,7 +125,7 @@ func (mq *memQueue) Pull(ctx context.Context) (*Task, context.Context, error) {
 	if task == nil {
 		return nil, nil, nil
 	}
-	return task, context.Background(), nil
+	return task, mq.ctx, nil
 }
 
 func (mq *memQueue) Drop(ctx context.Context, id string) error {
@@ -153,6 +161,7 @@ func (mq *memQueue) Count(ctx context.Context) (int, int, error) {
 }
 
 func (mq *memQueue) Stop(ctx context.Context) error {
+	mq.ctxCancel()
 	return nil
 }
 
@@ -176,14 +185,6 @@ func (mq *memQueue) reorder() {
 		return
 	}
 	mq.pendingTasks = append(mq.pendingTasks[mq.head:], mq.pendingTasks[0:mq.head]...)
-	// var next int
-	// var nextContent = mq.pendingTasks[mq.head]
-	// var transform string
-	// for i := 0; i < len(mq.pendingTasks); i++ {
-	// 	transform = fmt.Sprintf("%s%v->%d, ", transform, nextContent, next)
-	// 	nextContent, mq.pendingTasks[next] = mq.pendingTasks[next], nextContent
-	// 	next = (next - mq.head + len(mq.pendingTasks)) % len(mq.pendingTasks)
-	// }
 	mq.head = 0
 	mq.tail = mq.pending % len(mq.pendingTasks)
 }

@@ -120,6 +120,16 @@ func UnmarshalJSONNodeWithFeatures(n *tree.Node, b []byte, features []feature.Fe
 	return nil
 }
 
+/*
+MarshalJSONCriterion takes a feature.Criterion and returns a slice
+of bytes containing its serialization to JSON. It uses the
+MarshalJSONContinuousCriterion, MarshalJSONDiscreteCriterion and
+MarshalJSONUndefinedCriterion functions to serialize a
+feature.ContinuousCriterion, a feature.DiscreteCriterion or
+a feature.UndefinedCriterion respectively. It returns an error
+if the feature.Criterion is not one of these or if there is
+an error during the serialization.
+*/
 func MarshalJSONCriterion(fc feature.Criterion) ([]byte, error) {
 	switch c := fc.(type) {
 	case feature.ContinuousCriterion:
@@ -133,6 +143,17 @@ func MarshalJSONCriterion(fc feature.Criterion) ([]byte, error) {
 	}
 }
 
+/*
+MarshalJSONContinuousCriterion takes a feature.ContinuousCriterion and
+returns a serialization of it into JSON or an error. The serialization
+is a JSON object with the following fields:
+* "type": a string set to "continuous"
+* "feature": a string set to the name of the feature of the criterion
+* "a": a number specifying where the interval of the criterion starts
+or the string "-Inf" if it has no finite start.
+* "b": a number specifying where the interval of the criterion ends
+or the string "+Inf" if it has no finite end.
+*/
 func MarshalJSONContinuousCriterion(cfc feature.ContinuousCriterion) ([]byte, error) {
 	a, b := cfc.Interval()
 	sa := fmt.Sprintf("%f", a)
@@ -145,6 +166,14 @@ func MarshalJSONContinuousCriterion(cfc feature.ContinuousCriterion) ([]byte, er
 	})
 }
 
+/*
+MarshalJSONDiscreteCriterion takes a feature.DiscreteCriterion and
+returns a serialization of it into JSON or an error. The serialization
+is a JSON object with the following fields:
+* "type": a string set to "discrete"
+* "feature": a string set to the name of the feature of the criterion
+* "value": a string with the value that satisfies the criterion.
+*/
 func MarshalJSONDiscreteCriterion(dfc feature.DiscreteCriterion) ([]byte, error) {
 	return json.Marshal(&jsonCriterion{
 		Type:    "discrete",
@@ -153,6 +182,13 @@ func MarshalJSONDiscreteCriterion(dfc feature.DiscreteCriterion) ([]byte, error)
 	})
 }
 
+/*
+MarshalJSONUndefinedCriterion takes a feature.UndefinedCriterion and
+returns a serialization of it into JSON or an error. The serialization
+is a JSON object with the following fields:
+* "type": a string set to "undefined"
+* "feature": a string set to the name of the feature of the criterion
+*/
 func MarshalJSONUndefinedCriterion(u feature.UndefinedCriterion) ([]byte, error) {
 	return json.Marshal(&jsonCriterion{
 		Type:    "undefined",
@@ -234,6 +270,16 @@ func (jc *jsonCriterion) toContinuousCriterion(f feature.Feature) (feature.Crite
 	return feature.NewContinuousCriterion(cf, a, b), nil
 }
 
+/*
+UnmarshalJSONPrediction takes a slice of bytes and returns
+a pointer to a new tree.Prediction with the data from the slice
+unmarshalled into it or an error. The slice of bytes is expected
+to contain a JSON object with the following fields:
+* "probabilities": a JSON object with string keys (values) and
+numeric (float64) values (probability of that value)
+* "weight": a number (integer) corresponding to the number of
+samples in the set from which the prediction was made.
+*/
 func UnmarshalJSONPrediction(b []byte) (*tree.Prediction, error) {
 	jp := &jsonPrediction{}
 	err := json.Unmarshal(b, jp)

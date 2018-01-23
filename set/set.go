@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	sampleCountThresholdForSetImplementation = 100
+	sampleCountThresholdForSetImplementation = 1000
 )
 
 /*
@@ -61,7 +61,7 @@ func New(samples []Sample) Set {
 }
 
 /*
-NewMemoryIntensiveSet takes a slice of samples and returns a Set
+NewMemoryIntensive takes a slice of samples and returns a Set
 built with them. A memory-intensive set is an implementation that
 replicates the slice of samples when subsetting to reduce
 calculations at the cost of increased memory.
@@ -71,7 +71,7 @@ func NewMemoryIntensive(samples []Sample) Set {
 }
 
 /*
-NewCPUIntensiveSet takes a slice of samples and returns a Set
+NewCPUIntensive takes a slice of samples and returns a Set
 built with them. A cpu-intensive set is an implementation that
 instead of replicating the samples when subsetting, stores the
 applying feature criteria to define the subset and keeps the same

@@ -1,3 +1,6 @@
+/*
+Package csv provides functions to read/write a set.Set as CSV
+*/
 package csv
 
 import (

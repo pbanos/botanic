@@ -50,14 +50,29 @@ func (p *Prediction) String() string {
 	return strings.Replace(fmt.Sprintf("%v", p.probabilities), "map", "", 1)
 }
 
+/*
+Probabilities returns a map of string to float64 containing
+the probabilities of each available value
+*/
 func (p *Prediction) Probabilities() map[string]float64 {
 	return p.probabilities
 }
 
+/*
+Weight returns the weight of the prediction: an
+int equal to the number of samples in the set from which
+the prediction was made
+*/
 func (p *Prediction) Weight() int {
 	return p.weight
 }
 
+/*
+NewPrediction takes a map[string]float64 with the probabilities
+of each value in the prediction and an integer with the number
+of samples in the set from which those probabilities were computed
+and returns a prediction representing those values.
+*/
 func NewPrediction(probs map[string]float64, weight int) *Prediction {
 	return &Prediction{probabilities: probs, weight: weight}
 }
@@ -93,7 +108,7 @@ func joinPredictions(p1 *Prediction, p2 *Prediction) (*Prediction, error) {
 	return &Prediction{mergedProbs, totalWeight}, nil
 }
 
-// NewPrediction takes a context, a set and a feature and returns
+// NewPredictionFromSet takes a context, a set and a feature and returns
 // a prediction for the feature based on the (training) data in the set
 // or an error if there are no samples in the set, or the set cannot
 // be queried

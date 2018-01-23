@@ -186,12 +186,13 @@ botanic set split -i data.db -o train.db -s postgres://myuser:mypasswd@mypostgre
 #### Tree command
 The `botanic tree` command works with trees.
 
-We can see the flags and subcommands available for it running it with the `--help` or `-h` flag:
+On its own it shows a tree on the standard output, but it has some available subcommands. We can see the flags and subcommands available for it running it with the `--help` or `-h` flag:
 ```
 $ botanic tree --help
-Grow and test regression trees and use them to predict values for samples
+Manage regression trees and use them to predict values for samples
 
 Usage:
+  botanic tree [flags]
   botanic tree [command]
 
 Available Commands:
@@ -200,7 +201,9 @@ Available Commands:
   test        Test the performance of a tree
 
 Flags:
-  -h, --help   help for tree
+  -h, --help              help for tree
+  -m, --metadata string   path to a YML file with metadata describing the different features used on a tree or available on an input set (required)
+  -t, --tree string       path to a file from which the tree to show will be read and parsed as JSON (required)
 
 Global Flags:
   -v, --verbose
@@ -208,6 +211,16 @@ Global Flags:
 Use "botanic tree [command] --help" for more information about a command.
 $
 ```
+
+To show a given tree, previously generated with the grow subcommand described below, we will specify the following flags:
+- the path to the metadata YAML file describing the features in the tree, with the `--metadata` or `-m`flag
+- the path to the json file with the tree to show, with the `--tree` or `-t` flag
+
+For example, to show a tree in a tree.json file with our metadata.yml as metadata file we would run:
+```Bash
+botanic tree -m metadata.yml -t tree.json
+```
+
 ##### Grow subcommand
 The `botanic tree grow` command grows a tree from an input set of data: the training set of data.
 
@@ -221,16 +234,16 @@ Usage:
 
 Flags:
   -c, --class-feature string   name of the feature the generated tree should predict (required)
+      --concurrency int        limit to concurrent workers on the tree and on DB connections opened at a time (defaults to 1) (default 1)
       --cpu-intensive          force the use of cpu-intensive subsetting to decrease memory use at the cost of increasing time
   -h, --help                   help for grow
   -i, --input string           path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)
-      --max-db-conns int       limit to DB connections opened at a time (defaults to 0: no limit)
       --memory-intensive       force the use of memory-intensive subsetting to decrease time at the cost of increasing memory use
-  -m, --metadata string        path to a YML file with metadata describing the different features available available on the input file (required)
   -o, --output string          path to a file to which the generated tree will be written in JSON format (defaults to STDOUT)
   -p, --prune string           pruning strategy to apply, the following are valid: default, minimum-information-gain:[VALUE], none (default "default")
 
 Global Flags:
+  -m, --metadata string   path to a YML file with metadata describing the different features used on a tree or available on an input set (required)
   -v, --verbose
 $
 ```
@@ -265,26 +278,25 @@ The `botanic tree test` command takes a tree and a test set and provides informa
 We can see the flags available for it running it with the `--help` or `-h` flag:
 ```
 $ botanic tree test --help
-Test the performance of a tree against a test data set.
+Test the performance of a tree against a test data set
 
 Usage:
   botanic tree test [flags]
 
 Flags:
-  -c, --class-feature string   name of the feature the generated tree should predict (required)
-  -h, --help                   help for test
-  -i, --input string           path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)
-  -m, --metadata string        path to a YML file with metadata describing the different features available available on the input file (required)
-  -t, --tree string            path to a file from which the tree to test will be read and parsed as JSON (required)
+  -h, --help           help for test
+  -i, --input string   path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)
+  -t, --tree string    path to a file from which the tree to test will be read and parsed as JSON (required)
 
 Global Flags:
+  -m, --metadata string   path to a YML file with metadata describing the different features used on a tree or available on an input set (required)
   -v, --verbose
 $
 ```
 
 For example, to test the tree we grown on file tree.json with the testing set we split into our PostgreSQL database accessible at postgres://myuser:mypasswd@mypostgress.server.com/mydb we would run:
 ```
-botanic tree test -c Prediction -i postgres://myuser:mypasswd@mypostgress.server.com/mydb -m metadata.yml -t tree.json
+botanic tree test -i postgres://myuser:mypasswd@mypostgress.server.com/mydb -m metadata.yml -t tree.json
 ```
 
 The output could be similar to:
@@ -305,13 +317,12 @@ Usage:
   botanic tree predict [flags]
 
 Flags:
-  -c, --class-feature string     name of the feature the generated tree should predict (required)
   -h, --help                     help for predict
-  -m, --metadata string          path to a YML file with metadata describing the different features available available on the input file (required)
   -t, --tree string              path to a file from which the tree to test will be read and parsed as JSON (required)
   -u, --undefined-value string   value to input to define a sample's value for a feature as undefined (default "?")
 
 Global Flags:
+  -m, --metadata string   path to a YML file with metadata describing the different features used on a tree or available on an input set (required)
   -v, --verbose
 $
 ```
@@ -328,16 +339,13 @@ $
 
 ## State and roadmap
 
-The project is curently very unstable and specifically the APIs exposed by the botanic and bio libraries are expected to change. 
+The project is curently unstable and APIs and tool commands may suffer some changes. 
 
-These are the items planned for future development of the botanic toolf and libraries:
+These are the items planned for future development of the botanic tool and libraries:
 
-- Cache count and entropy of a set
-- Refactor tree into a collection of nodes
-  * Refactor tree serialization to use an io.Writer and avoid whole in-memory keeping of the serialized tree
-  * Replace collection of tree nodes with a tree node store interface and develop an in-memory implementation
-    * Develop an etcd-backed tree node store implementation
-      * Implement multi-process distributed growing of a tree
+- Use [dep](https://github.com/golang/dep) to manage dependencies
+- Implement multi-process distributed growing of a tree
+- Develop an etcd-backed tree node store implementation
 - Implement other DB adaptors for sets:
   * MySQL
   * MongoDB
