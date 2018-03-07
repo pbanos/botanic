@@ -1,5 +1,5 @@
 /*
-Package inputsample provides an implementation of set.Sample that is read
+Package inputsample provides an implementation of dataset.Sample that is read
 from an io.Reader.
 */
 package inputsample
@@ -11,8 +11,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/pbanos/botanic/dataset"
 	"github.com/pbanos/botanic/feature"
-	"github.com/pbanos/botanic/set"
 )
 
 /*
@@ -63,7 +63,7 @@ rejected with the FeatureValueRequester's RejectValueFor method.
 Attempting to obtain a value for Feature not in the given
 features slice, or for another type of feature will return nil.
 */
-func New(r io.Reader, features []feature.Feature, featureValueRequester FeatureValueRequester, undefinedValue string) set.Sample {
+func New(r io.Reader, features []feature.Feature, featureValueRequester FeatureValueRequester, undefinedValue string) dataset.Sample {
 	scanner := bufio.NewScanner(os.Stdin)
 	return &readSample{make(map[string]interface{}), undefinedValue, scanner, featureValueRequester, features}
 }

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pbanos/botanic/dataset"
 	"github.com/pbanos/botanic/feature"
-	"github.com/pbanos/botanic/set"
 )
 
 /*
@@ -30,9 +30,9 @@ const ErrCannotPredictFromSample = PredictionError("no prediction available for 
 
 /*
 ErrCannotPredictFromEmptySet is the error returned when trying to build a prediction
-based on an empty set of data.
+based on an empty dataset.
 */
-const ErrCannotPredictFromEmptySet = PredictionError("cannot make prediction for empty set")
+const ErrCannotPredictFromEmptySet = PredictionError("cannot make prediction for empty dataset")
 
 func (pe PredictionError) Error() string {
 	return string(pe)
@@ -60,7 +60,7 @@ func (p *Prediction) Probabilities() map[string]float64 {
 
 /*
 Weight returns the weight of the prediction: an
-int equal to the number of samples in the set from which
+int equal to the number of samples in the dataset from which
 the prediction was made
 */
 func (p *Prediction) Weight() int {
@@ -70,7 +70,7 @@ func (p *Prediction) Weight() int {
 /*
 NewPrediction takes a map[string]float64 with the probabilities
 of each value in the prediction and an integer with the number
-of samples in the set from which those probabilities were computed
+of samples in the dataset from which those probabilities were computed
 and returns a prediction representing those values.
 */
 func NewPrediction(probs map[string]float64, weight int) *Prediction {
@@ -108,11 +108,11 @@ func joinPredictions(p1 *Prediction, p2 *Prediction) (*Prediction, error) {
 	return &Prediction{mergedProbs, totalWeight}, nil
 }
 
-// NewPredictionFromSet takes a context, a set and a feature and returns
-// a prediction for the feature based on the (training) data in the set
-// or an error if there are no samples in the set, or the set cannot
+// NewPredictionFromSet takes a context, a dataset and a feature and returns
+// a prediction for the feature based on the (training) data in the dataset
+// or an error if there are no samples in the dataset, or the dataset cannot
 // be queried
-func NewPredictionFromSet(ctx context.Context, s set.Set, f feature.Feature) (*Prediction, error) {
+func NewPredictionFromSet(ctx context.Context, s dataset.Dataset, f feature.Feature) (*Prediction, error) {
 	weight, err := s.Count(ctx)
 	if err != nil {
 		return nil, err

@@ -3,8 +3,8 @@ package queue
 import (
 	"fmt"
 
+	"github.com/pbanos/botanic/dataset"
 	"github.com/pbanos/botanic/feature"
-	"github.com/pbanos/botanic/set"
 	"github.com/pbanos/botanic/tree"
 )
 
@@ -13,10 +13,10 @@ import (
 type Task struct {
 	// The node to be developed
 	Node *tree.Node
-	// The set of training data with samples
+	// The dataset of training data with samples
 	// satisfying the constraints on the node
 	// and its ancestors.
-	Set set.Set
+	Dataset dataset.Dataset
 	// The list of features that can be used
 	// to split the node into branches.
 	// It should exclude the features used in

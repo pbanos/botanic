@@ -16,7 +16,7 @@ WriteJSONTree takes a context.Context, a pointer to a tree.Tree and an
 io.Writer and serializes the given tree as JSON onto the io.Writer.
 A tree is serialized as a JSON object with the following fields:
 * "rootID": a string with the ID of the node at the root of the tree
-* "classFeature": a string with the name of the feature the tree predicts
+* "label": a string with the name of the feature the tree predicts
 * "nodes": an array containing the nodes that can be traversed on the tree
   serialized by MarshalJSONNode.
 An error is returned if the tree cannot be traversed, serialized or written
@@ -45,7 +45,7 @@ io.Reader and unmarshals the contents of the io.Reader onto the given
 tree.
 A tree is expected to be a JSON object with the following fields:
 * "rootID": a string with the ID of the node at the root of the tree
-* "classFeature": a string with the name of the feature the tree predicts
+* "label": a string with the name of the feature the tree predicts
 * "nodes": an array containing the nodes that can be traversed on the tree
   unmarshalled by UnmarshalJSONNodeWithFeatures.
 An error is returned if the JSON cannot be read from the io.Reader or
@@ -54,9 +54,9 @@ unmarshalled onto the tree.
 func ReadJSONTree(ctx context.Context, t *tree.Tree, features []feature.Feature, r io.Reader) error {
 	dec := json.NewDecoder(r)
 	jt := &struct {
-		RootID       string             `json:"rootID"`
-		ClassFeature string             `json:"classFeature"`
-		Nodes        []*json.RawMessage `json:"nodes"`
+		RootID string             `json:"rootID"`
+		Label  string             `json:"label"`
+		Nodes  []*json.RawMessage `json:"nodes"`
 	}{}
 	err := dec.Decode(jt)
 	if err != nil {
@@ -64,18 +64,18 @@ func ReadJSONTree(ctx context.Context, t *tree.Tree, features []feature.Feature,
 	}
 	var cf feature.Feature
 	for _, f := range features {
-		if f.Name() == jt.ClassFeature {
+		if f.Name() == jt.Label {
 			cf = f
 			break
 		}
 	}
 	if cf == nil {
-		return fmt.Errorf("no class feature defined")
+		return fmt.Errorf("no label feature defined")
 	}
 	if jt.RootID == "" {
 		return fmt.Errorf("no root node id available")
 	}
-	t.ClassFeature = cf
+	t.Label = cf
 	t.RootID = jt.RootID
 	for _, jn := range jt.Nodes {
 		n := &tree.Node{}
@@ -96,11 +96,11 @@ func marshalJSONTreeHeader(ctx context.Context, t *tree.Tree, w io.Writer) error
 	if err != nil {
 		return err
 	}
-	jFeatureName, err := json.Marshal(t.ClassFeature.Name())
+	jFeatureName, err := json.Marshal(t.Label.Name())
 	if err != nil {
 		return err
 	}
-	header := fmt.Sprintf(`{"rootID":%s,"classFeature":%s,"nodes":[`, jrootID, jFeatureName)
+	header := fmt.Sprintf(`{"rootID":%s,"label":%s,"nodes":[`, jrootID, jFeatureName)
 	_, err = w.Write([]byte(header))
 	return err
 }

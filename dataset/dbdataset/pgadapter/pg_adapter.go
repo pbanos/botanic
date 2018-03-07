@@ -1,6 +1,6 @@
 /*
 Package pgadapter provides an implementation of the
-Adapter interface in the sqlset package that works
+Adapter interface in the dbdataset package that works
 over a PostgreSQL database.
 */
 package pgadapter
@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pbanos/botanic/set/sqlset"
+	"github.com/pbanos/botanic/dataset/dbdataset"
 
 	// Import of PostgreSQL driver
 	_ "github.com/lib/pq"
@@ -44,7 +44,7 @@ type adapter struct {
 New takes a PostgreSQL database connection URL and returns
 an Adapter that works on the database or an error if it fails to connect to it.
 */
-func New(url string) (sqlset.Adapter, error) {
+func New(url string) (dbdataset.Adapter, error) {
 	db, err := sql.Open("postgres", url)
 	if err != nil {
 		return nil, err
@@ -281,7 +281,7 @@ func (a *adapter) AddSamples(ctx context.Context, rawSamples []map[string]interf
 	return chunkEnd, nil
 }
 
-func (a *adapter) ListSamples(ctx context.Context, criteria []*sqlset.FeatureCriterion, discreteFeatureColumns, continuousFeatureColumns []string) ([]map[string]interface{}, error) {
+func (a *adapter) ListSamples(ctx context.Context, criteria []*dbdataset.FeatureCriterion, discreteFeatureColumns, continuousFeatureColumns []string) ([]map[string]interface{}, error) {
 	var result []map[string]interface{}
 	err := a.IterateOnSamples(
 		ctx,
@@ -298,7 +298,7 @@ func (a *adapter) ListSamples(ctx context.Context, criteria []*sqlset.FeatureCri
 	return result, nil
 }
 
-func (a *adapter) IterateOnSamples(ctx context.Context, criteria []*sqlset.FeatureCriterion, discreteFeatureColumns, continuousFeatureColumns []string, lambda func(int, map[string]interface{}) (bool, error)) error {
+func (a *adapter) IterateOnSamples(ctx context.Context, criteria []*dbdataset.FeatureCriterion, discreteFeatureColumns, continuousFeatureColumns []string, lambda func(int, map[string]interface{}) (bool, error)) error {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(`SELECT "`)
@@ -358,7 +358,7 @@ func (a *adapter) IterateOnSamples(ctx context.Context, criteria []*sqlset.Featu
 	return err
 }
 
-func (a *adapter) CountSamples(ctx context.Context, criteria []*sqlset.FeatureCriterion) (int, error) {
+func (a *adapter) CountSamples(ctx context.Context, criteria []*dbdataset.FeatureCriterion) (int, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(`SELECT COUNT(*) FROM samples`)
@@ -383,7 +383,7 @@ func (a *adapter) CountSamples(ctx context.Context, criteria []*sqlset.FeatureCr
 	return count, err
 }
 
-func (a *adapter) ListSampleDiscreteFeatureValues(ctx context.Context, fc string, criteria []*sqlset.FeatureCriterion) ([]int, error) {
+func (a *adapter) ListSampleDiscreteFeatureValues(ctx context.Context, fc string, criteria []*dbdataset.FeatureCriterion) ([]int, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(fmt.Sprintf(`SELECT DISTINCT "%s" FROM samples`, fc))
@@ -415,7 +415,7 @@ func (a *adapter) ListSampleDiscreteFeatureValues(ctx context.Context, fc string
 	return result, err
 }
 
-func (a *adapter) ListSampleContinuousFeatureValues(ctx context.Context, fc string, criteria []*sqlset.FeatureCriterion) ([]float64, error) {
+func (a *adapter) ListSampleContinuousFeatureValues(ctx context.Context, fc string, criteria []*dbdataset.FeatureCriterion) ([]float64, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(fmt.Sprintf(`SELECT DISTINCT "%s" FROM samples`, fc))
@@ -447,7 +447,7 @@ func (a *adapter) ListSampleContinuousFeatureValues(ctx context.Context, fc stri
 	return result, err
 }
 
-func (a *adapter) CountSampleDiscreteFeatureValues(ctx context.Context, fc string, criteria []*sqlset.FeatureCriterion) (map[int]int, error) {
+func (a *adapter) CountSampleDiscreteFeatureValues(ctx context.Context, fc string, criteria []*dbdataset.FeatureCriterion) (map[int]int, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(fmt.Sprintf(`SELECT "%s", COUNT("%s") FROM samples`, fc, fc))
@@ -481,7 +481,7 @@ func (a *adapter) CountSampleDiscreteFeatureValues(ctx context.Context, fc strin
 	return result, err
 }
 
-func (a *adapter) CountSampleContinuousFeatureValues(ctx context.Context, fc string, criteria []*sqlset.FeatureCriterion) (map[float64]int, error) {
+func (a *adapter) CountSampleContinuousFeatureValues(ctx context.Context, fc string, criteria []*dbdataset.FeatureCriterion) (map[float64]int, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(fmt.Sprintf(`SELECT "%s", COUNT("%s") FROM samples`, fc, fc))
@@ -515,7 +515,7 @@ func (a *adapter) CountSampleContinuousFeatureValues(ctx context.Context, fc str
 	return result, err
 }
 
-func buildWhereClause(criteria []*sqlset.FeatureCriterion) (string, []interface{}) {
+func buildWhereClause(criteria []*dbdataset.FeatureCriterion) (string, []interface{}) {
 	if len(criteria) == 0 {
 		return "", nil
 	}

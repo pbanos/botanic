@@ -1,4 +1,4 @@
-package sqlset
+package dbdataset
 
 import "context"
 
@@ -11,7 +11,7 @@ a column name for the feature in a string or an error
 
 CreateDiscreteValuesTable should create a table containing
 the different values discrete features can take in the
-samples of the working sets.
+samples of the working datasets.
 
 CreateSampleTable should create a table for the samples,
 using foreign keys to the discrete value table for discrete

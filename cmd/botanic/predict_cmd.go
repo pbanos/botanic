@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/pbanos/botanic/dataset/inputsample"
 	"github.com/pbanos/botanic/feature"
 	"github.com/pbanos/botanic/feature/yaml"
-	"github.com/pbanos/botanic/set/inputsample"
 	"github.com/pbanos/botanic/tree"
 	"github.com/spf13/cobra"
 )
@@ -24,7 +24,7 @@ func predictCmd(treeConfig *treeCmdConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "predict",
 		Short: "Predict a value for a sample answering questions",
-		Long:  `Use the loaded tree to predict the class feature value for a sample answering a reduced set of question about its features`,
+		Long:  `Use the loaded tree to predict the label feature value for a sample answering a reduced set of question about its features`,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := config.Validate()
 			if err != nil {

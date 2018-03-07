@@ -5,25 +5,25 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pbanos/botanic/dataset"
 	"github.com/pbanos/botanic/feature"
-	"github.com/pbanos/botanic/set"
 )
 
 // Tree represents a a regression tree. It is composed of a
 // NodeStore where all its nodes are stored, the id for the
-// root node of the tree and the classFeature it is able to
+// root node of the tree and the label it is able to
 // predict.
 type Tree struct {
 	NodeStore
-	RootID       string
-	ClassFeature feature.Feature
+	RootID string
+	Label  feature.Feature
 }
 
-// New takes the ID for the root Node, a NodeStore and a class feature and
+// New takes the ID for the root Node, a NodeStore and a label feature and
 // returns a tree composed of the nodes in the NodeStore connected to the
 // node with the given root ID that to predict the given feature.
-func New(rootID string, nodeStore NodeStore, classFeature feature.Feature) *Tree {
-	return &Tree{nodeStore, rootID, classFeature}
+func New(rootID string, nodeStore NodeStore, label feature.Feature) *Tree {
+	return &Tree{nodeStore, rootID, label}
 }
 
 // Predict takes a sample and returns a prediction according to the tree and an
@@ -78,13 +78,13 @@ func (t *Tree) Predict(ctx context.Context, s feature.Sample) (*Prediction, erro
 
 /*
 Test takes a context.Context, a Set and a class Feature and returns three values:
- * the prediction success rate of the tree over the given Set for the classFeature
- * the number of failing predictions for the set because of ErrCannotPredictFromSample errors
+ * the prediction success rate of the tree over the given Set for the label
+ * the number of failing predictions for the dataset because of ErrCannotPredictFromSample errors
  * an error if a prediction could not be set for reasons other than the tree not
    being able to do so. If this is not nil, the other values will be 0.0 and 0
    respectively
 */
-func (t *Tree) Test(ctx context.Context, s set.Set) (float64, int, error) {
+func (t *Tree) Test(ctx context.Context, s dataset.Dataset) (float64, int, error) {
 	if t == nil {
 		return 0.0, 0, nil
 	}
@@ -107,7 +107,7 @@ func (t *Tree) Test(ctx context.Context, s set.Set) (float64, int, error) {
 			errCount++
 		} else {
 			pV, _ := p.PredictedValue()
-			v, err := sample.ValueFor(t.ClassFeature)
+			v, err := sample.ValueFor(t.Label)
 			if err != nil {
 				return 0.0, 0, err
 			}

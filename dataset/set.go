@@ -1,4 +1,4 @@
-package set
+package dataset
 
 import (
 	"context"
@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	sampleCountThresholdForSetImplementation = 1000
+	sampleCountThresholdForDatasetImplementation = 1000
 )
 
 /*
-Set represents a collection of samples.
+Dataset represents a collection of samples.
 
-Its Entropy method returns the entropy of the set for a given Feature: a
+Its Entropy method returns the entropy of the dataset for a given Feature: a
 measure of the disinformation we have on the classes of samples that belong to
 it.
 
@@ -27,21 +27,21 @@ contains samples that satisfy it.
 
 Its Samples method returns the samples it contains
 */
-type Set interface {
+type Dataset interface {
 	Entropy(context.Context, feature.Feature) (float64, error)
-	SubsetWith(context.Context, feature.Criterion) (Set, error)
+	SubsetWith(context.Context, feature.Criterion) (Dataset, error)
 	FeatureValues(context.Context, feature.Feature) ([]interface{}, error)
 	CountFeatureValues(context.Context, feature.Feature) (map[string]int, error)
 	Samples(context.Context) ([]Sample, error)
 	Count(context.Context) (int, error)
 }
 
-type memoryIntensiveSubsettingSet struct {
+type memoryIntensiveSubsettingDataset struct {
 	entropy *float64
 	samples []Sample
 }
 
-type cpuIntensiveSubsettingSet struct {
+type cpuIntensiveSubsettingDataset struct {
 	entropy  *float64
 	count    *int
 	samples  []Sample
@@ -49,51 +49,51 @@ type cpuIntensiveSubsettingSet struct {
 }
 
 /*
-New takes a slice of samples and returns a set built with them.
-The set will be a CPU intensive one when the number of samples is
-over sampleCountThresholdForSetImplementation
+New takes a slice of samples and returns a dataset built with them.
+The dataset will be a CPU intensive one when the number of samples is
+over sampleCountThresholdForDatasetImplementation
 */
-func New(samples []Sample) Set {
-	if len(samples) > sampleCountThresholdForSetImplementation {
-		return &cpuIntensiveSubsettingSet{nil, nil, samples, []feature.Criterion{}}
+func New(samples []Sample) Dataset {
+	if len(samples) > sampleCountThresholdForDatasetImplementation {
+		return &cpuIntensiveSubsettingDataset{nil, nil, samples, []feature.Criterion{}}
 	}
-	return &memoryIntensiveSubsettingSet{nil, samples}
+	return &memoryIntensiveSubsettingDataset{nil, samples}
 }
 
 /*
-NewMemoryIntensive takes a slice of samples and returns a Set
-built with them. A memory-intensive set is an implementation that
+NewMemoryIntensive takes a slice of samples and returns a Dataset
+built with them. A memory-intensive dataset is an implementation that
 replicates the slice of samples when subsetting to reduce
 calculations at the cost of increased memory.
 */
-func NewMemoryIntensive(samples []Sample) Set {
-	return &memoryIntensiveSubsettingSet{nil, samples}
+func NewMemoryIntensive(samples []Sample) Dataset {
+	return &memoryIntensiveSubsettingDataset{nil, samples}
 }
 
 /*
-NewCPUIntensive takes a slice of samples and returns a Set
-built with them. A cpu-intensive set is an implementation that
+NewCPUIntensive takes a slice of samples and returns a Dataset
+built with them. A cpu-intensive dataset is an implementation that
 instead of replicating the samples when subsetting, stores the
 applying feature criteria to define the subset and keeps the same
 sample slice. This can achieve a drastic reduction in memory use
 that comes at the cost of CPU time: every calculation that goes over
-the samples of the set will apply the feature criteria of the set
+the samples of the dataset will apply the feature criteria of the dataset
 on all original samples (the ones provided to this method).
 */
-func NewCPUIntensive(samples []Sample) Set {
-	return &cpuIntensiveSubsettingSet{nil, nil, samples, []feature.Criterion{}}
+func NewCPUIntensive(samples []Sample) Dataset {
+	return &cpuIntensiveSubsettingDataset{nil, nil, samples, []feature.Criterion{}}
 }
 
-func (s *memoryIntensiveSubsettingSet) Count(ctx context.Context) (int, error) {
+func (s *memoryIntensiveSubsettingDataset) Count(ctx context.Context) (int, error) {
 	return len(s.samples), nil
 }
 
-func (s *cpuIntensiveSubsettingSet) Count(ctx context.Context) (int, error) {
+func (s *cpuIntensiveSubsettingDataset) Count(ctx context.Context) (int, error) {
 	if s.count != nil {
 		return *s.count, nil
 	}
 	var length int
-	s.iterateOnSet(func(_ Sample) (bool, error) {
+	s.iterateOnDataset(func(_ Sample) (bool, error) {
 		length++
 		return true, nil
 	})
@@ -101,7 +101,7 @@ func (s *cpuIntensiveSubsettingSet) Count(ctx context.Context) (int, error) {
 	return length, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) Entropy(ctx context.Context, f feature.Feature) (float64, error) {
+func (s *memoryIntensiveSubsettingDataset) Entropy(ctx context.Context, f feature.Feature) (float64, error) {
 	if s.entropy != nil {
 		return *s.entropy, nil
 	}
@@ -130,14 +130,14 @@ func (s *memoryIntensiveSubsettingSet) Entropy(ctx context.Context, f feature.Fe
 	return result, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) Entropy(ctx context.Context, f feature.Feature) (float64, error) {
+func (s *cpuIntensiveSubsettingDataset) Entropy(ctx context.Context, f feature.Feature) (float64, error) {
 	if s.entropy != nil {
 		return *s.entropy, nil
 	}
 	var result float64
 	featureValueCounts := make(map[string]float64)
 	count := 0.0
-	err := s.iterateOnSet(func(sample Sample) (bool, error) {
+	err := s.iterateOnDataset(func(sample Sample) (bool, error) {
 		v, err := sample.ValueFor(f)
 		if err != nil {
 			return false, err
@@ -163,7 +163,7 @@ func (s *cpuIntensiveSubsettingSet) Entropy(ctx context.Context, f feature.Featu
 	return result, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) FeatureValues(ctx context.Context, f feature.Feature) ([]interface{}, error) {
+func (s *memoryIntensiveSubsettingDataset) FeatureValues(ctx context.Context, f feature.Feature) ([]interface{}, error) {
 	result := []interface{}{}
 	encountered := make(map[string]bool)
 	for _, sample := range s.samples {
@@ -180,10 +180,10 @@ func (s *memoryIntensiveSubsettingSet) FeatureValues(ctx context.Context, f feat
 	return result, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) FeatureValues(ctx context.Context, f feature.Feature) ([]interface{}, error) {
+func (s *cpuIntensiveSubsettingDataset) FeatureValues(ctx context.Context, f feature.Feature) ([]interface{}, error) {
 	result := []interface{}{}
 	encountered := make(map[string]bool)
-	err := s.iterateOnSet(func(sample Sample) (bool, error) {
+	err := s.iterateOnDataset(func(sample Sample) (bool, error) {
 		v, err := sample.ValueFor(f)
 		if err != nil {
 			return false, err
@@ -201,7 +201,7 @@ func (s *cpuIntensiveSubsettingSet) FeatureValues(ctx context.Context, f feature
 	return result, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) SubsetWith(ctx context.Context, fc feature.Criterion) (Set, error) {
+func (s *memoryIntensiveSubsettingDataset) SubsetWith(ctx context.Context, fc feature.Criterion) (Dataset, error) {
 	var samples []Sample
 	for _, sample := range s.samples {
 		ok, err := fc.SatisfiedBy(sample)
@@ -212,21 +212,21 @@ func (s *memoryIntensiveSubsettingSet) SubsetWith(ctx context.Context, fc featur
 			samples = append(samples, sample)
 		}
 	}
-	return &memoryIntensiveSubsettingSet{nil, samples}, nil
+	return &memoryIntensiveSubsettingDataset{nil, samples}, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) SubsetWith(ctx context.Context, fc feature.Criterion) (Set, error) {
+func (s *cpuIntensiveSubsettingDataset) SubsetWith(ctx context.Context, fc feature.Criterion) (Dataset, error) {
 	criteria := append([]feature.Criterion{fc}, s.criteria...)
-	return &cpuIntensiveSubsettingSet{nil, nil, s.samples, criteria}, nil
+	return &cpuIntensiveSubsettingDataset{nil, nil, s.samples, criteria}, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) Samples(ctx context.Context) ([]Sample, error) {
+func (s *memoryIntensiveSubsettingDataset) Samples(ctx context.Context) ([]Sample, error) {
 	return s.samples, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) Samples(ctx context.Context) ([]Sample, error) {
+func (s *cpuIntensiveSubsettingDataset) Samples(ctx context.Context) ([]Sample, error) {
 	var samples []Sample
-	err := s.iterateOnSet(func(sample Sample) (bool, error) {
+	err := s.iterateOnDataset(func(sample Sample) (bool, error) {
 		samples = append(samples, sample)
 		return true, nil
 	})
@@ -236,7 +236,7 @@ func (s *cpuIntensiveSubsettingSet) Samples(ctx context.Context) ([]Sample, erro
 	return samples, nil
 }
 
-func (s *memoryIntensiveSubsettingSet) CountFeatureValues(ctx context.Context, f feature.Feature) (map[string]int, error) {
+func (s *memoryIntensiveSubsettingDataset) CountFeatureValues(ctx context.Context, f feature.Feature) (map[string]int, error) {
 	result := make(map[string]int)
 	for _, sample := range s.samples {
 		v, err := sample.ValueFor(f)
@@ -249,9 +249,9 @@ func (s *memoryIntensiveSubsettingSet) CountFeatureValues(ctx context.Context, f
 	return result, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) CountFeatureValues(ctx context.Context, f feature.Feature) (map[string]int, error) {
+func (s *cpuIntensiveSubsettingDataset) CountFeatureValues(ctx context.Context, f feature.Feature) (map[string]int, error) {
 	result := make(map[string]int)
-	err := s.iterateOnSet(func(sample Sample) (bool, error) {
+	err := s.iterateOnDataset(func(sample Sample) (bool, error) {
 		v, err := sample.ValueFor(f)
 		if err != nil {
 			return false, err
@@ -266,7 +266,7 @@ func (s *cpuIntensiveSubsettingSet) CountFeatureValues(ctx context.Context, f fe
 	return result, nil
 }
 
-func (s *cpuIntensiveSubsettingSet) iterateOnSet(lambda func(Sample) (bool, error)) error {
+func (s *cpuIntensiveSubsettingDataset) iterateOnDataset(lambda func(Sample) (bool, error)) error {
 	for _, sample := range s.samples {
 		skip := false
 		for _, criterion := range s.criteria {

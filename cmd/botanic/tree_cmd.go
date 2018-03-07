@@ -48,7 +48,7 @@ func treeCmd(rootConfig *rootCmdConfig) *cobra.Command {
 			fmt.Println(tree)
 		},
 	}
-	cmd.PersistentFlags().StringVarP(&(config.metadataInput), "metadata", "m", "", "path to a YML file with metadata describing the different features used on a tree or available on an input set (required)")
+	cmd.PersistentFlags().StringVarP(&(config.metadataInput), "metadata", "m", "", "path to a YML file with metadata describing the different features used on a tree or available on an input dataset (required)")
 	cmd.AddCommand(growCmd(config), testCmd(config), predictCmd(config))
 	cmd.Flags().StringVarP(&(config.treeInput), "tree", "t", "", "path to a file from which the tree to show will be read and parsed as JSON (required)")
 	return cmd

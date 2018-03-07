@@ -1,5 +1,5 @@
 /*
-Package csv provides functions to read/write a set.Set as CSV
+Package csv provides functions to read/write a dataset.Dataset as CSV
 */
 package csv
 
@@ -11,12 +11,12 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/pbanos/botanic/dataset"
 	"github.com/pbanos/botanic/feature"
-	"github.com/pbanos/botanic/set"
 )
 
 /*
-Writer is an interface for a set to which samples
+Writer is an interface for a dataset to which samples
 can be written to.
 */
 type Writer interface {
@@ -24,7 +24,7 @@ type Writer interface {
 	// of samples and will return the actually written
 	// number of samples and an error (if not all samples
 	// could be written)
-	Write(context.Context, []set.Sample) (int, error)
+	Write(context.Context, []dataset.Sample) (int, error)
 	// Count returns the total number of samples written
 	// to the writer
 	Count() int
@@ -36,9 +36,9 @@ type Writer interface {
 
 /*
 SetGenerator is a function that takes a slice of samples
-and generates a set with them.
+and generates a dataset with them.
 */
-type SetGenerator func([]set.Sample) set.Set
+type SetGenerator func([]dataset.Sample) dataset.Dataset
 
 type csvWriter struct {
 	count    int
@@ -48,16 +48,16 @@ type csvWriter struct {
 
 /*
 ReadSet takes an io.Reader for a CSV stream, a slice of features and a
-SetGenerator and returns set.Set built with the SetGenerator and the
+SetGenerator and returns dataset.Dataset built with the SetGenerator and the
 samples parsed from the reader or an error.
 
 The header or first row of the CSV content is expected to consist of the names
 of the features in the given slice. The rest of the rows should consist of valid
 values for the all features and/or the '?' string to indicate an undefined value.
 */
-func ReadSet(reader io.Reader, features []feature.Feature, sg SetGenerator) (set.Set, error) {
-	samples := []set.Sample{}
-	err := ReadSetBySample(reader, features, func(_ int, s set.Sample) (bool, error) {
+func ReadSet(reader io.Reader, features []feature.Feature, sg SetGenerator) (dataset.Dataset, error) {
+	samples := []dataset.Sample{}
+	err := ReadSetBySample(reader, features, func(_ int, s dataset.Sample) (bool, error) {
 		samples = append(samples, s)
 		return true, nil
 	})
@@ -69,7 +69,7 @@ func ReadSet(reader io.Reader, features []feature.Feature, sg SetGenerator) (set
 
 /*
 ReadSetBySample takes an io.Reader for a CSV stream, a slice of features and a
-lambda function on an integer and a set.Sample that returns a boolean value.
+lambda function on an integer and a dataset.Sample that returns a boolean value.
 It parses the samples from the reader and for each it calls the lambda function
 with the sample and its index as parameters. If the lambda function returns true,
 it will continue processing the next sample, otherwise it will stop. An error is
@@ -79,7 +79,7 @@ The header or first row of the CSV content is expected to consist of the names
 of the features in the given slice. The rest of the rows should consist of valid
 values for the all features and/or the '?' string to indicate an undefined value.
 */
-func ReadSetBySample(reader io.Reader, features []feature.Feature, lambda func(int, set.Sample) (bool, error)) error {
+func ReadSetBySample(reader io.Reader, features []feature.Feature, lambda func(int, dataset.Sample) (bool, error)) error {
 	featuresByName := featureSliceToMap(features)
 	r := csv.NewReader(reader)
 	header, err := r.Read()
@@ -116,10 +116,10 @@ func ReadSetBySample(reader io.Reader, features []feature.Feature, lambda func(i
 /*
 ReadSetFromFilePath takes a filepath string, a slice of features and a SetGenerator,
 opens the file to which the filepath points to and uses ReadSet to return a
-set.Set or an error read from it. It will return an error if the given filepath
+dataset.Dataset or an error read from it. It will return an error if the given filepath
 cannot be opened for reading.
 */
-func ReadSetFromFilePath(filepath string, features []feature.Feature, sg SetGenerator) (set.Set, error) {
+func ReadSetFromFilePath(filepath string, features []feature.Feature, sg SetGenerator) (dataset.Dataset, error) {
 	var f *os.File
 	var err error
 	if filepath == "" {
@@ -127,20 +127,20 @@ func ReadSetFromFilePath(filepath string, features []feature.Feature, sg SetGene
 	} else {
 		f, err = os.Open(filepath)
 		if err != nil {
-			return nil, fmt.Errorf("reading training set: %v", err)
+			return nil, fmt.Errorf("reading training dataset: %v", err)
 		}
 	}
 	defer f.Close()
-	set, err := ReadSet(f, features, sg)
+	dataset, err := ReadSet(f, features, sg)
 	if err != nil {
 		err = fmt.Errorf("parsing CSV file %s: %v", filepath, err)
 	}
-	return set, err
+	return dataset, err
 }
 
 /*
 ReadSetBySampleFromFilePath takes an filepath string for a CSV stream, a
-slice of features and a lambda function on an integer and a set.Sample
+slice of features and a lambda function on an integer and a dataset.Sample
 that returns a boolean value. It opens the file for reading (if the filapath
 is "" os.Stdin is used instead), parses the samples from the reader and for
 each it calls the lambda function with the sample and its index as parameters.
@@ -152,7 +152,7 @@ The header or first row of the CSV content is expected to consist of the names
 of the features in the given slice. The rest of the rows should consist of valid
 values for the all features and/or the '?' string to indicate an undefined value.
 */
-func ReadSetBySampleFromFilePath(filepath string, features []feature.Feature, lambda func(int, set.Sample) (bool, error)) error {
+func ReadSetBySampleFromFilePath(filepath string, features []feature.Feature, lambda func(int, dataset.Sample) (bool, error)) error {
 	var f *os.File
 	var err error
 	if filepath == "" {
@@ -160,7 +160,7 @@ func ReadSetBySampleFromFilePath(filepath string, features []feature.Feature, la
 	} else {
 		f, err = os.Open(filepath)
 		if err != nil {
-			return fmt.Errorf("reading training set: %v", err)
+			return fmt.Errorf("reading training dataset: %v", err)
 		}
 	}
 	defer f.Close()
@@ -189,12 +189,12 @@ func NewWriter(writer io.Writer, features []feature.Feature) (Writer, error) {
 }
 
 /*
-WriteCSVSet takes a writer, a set.Set and a slice of features and
-dumps to the writer the set in CSV format, specifying only the features
+WriteCSVSet takes a writer, a dataset.Dataset and a slice of features and
+dumps to the writer the dataset in CSV format, specifying only the features
 in the given slice for the samples. It returns an error if something
 went wrong when wrting to the writer, or codifying the samples.
 */
-func WriteCSVSet(ctx context.Context, writer io.Writer, s set.Set, features []feature.Feature) error {
+func WriteCSVSet(ctx context.Context, writer io.Writer, s dataset.Dataset, features []feature.Feature) error {
 	cw, err := NewWriter(writer, features)
 	if err != nil {
 		return err
@@ -225,7 +225,7 @@ func parseFeaturesFromCSVHeader(header []string, features map[string]feature.Fea
 	return featureOrder, nil
 }
 
-func parseSampleFromCSVRow(row []string, featureOrder []feature.Feature) (set.Sample, error) {
+func parseSampleFromCSVRow(row []string, featureOrder []feature.Feature) (dataset.Sample, error) {
 	featureValues := make(map[string]interface{})
 	for i, f := range featureOrder {
 		v := row[i]
@@ -247,14 +247,14 @@ func parseSampleFromCSVRow(row []string, featureOrder []feature.Feature) (set.Sa
 		}
 		featureValues[f.Name()] = value
 	}
-	return set.NewSample(featureValues), nil
+	return dataset.NewSample(featureValues), nil
 }
 
 func (cw *csvWriter) Count() int {
 	return cw.count
 }
 
-func (cw *csvWriter) Write(ctx context.Context, samples []set.Sample) (int, error) {
+func (cw *csvWriter) Write(ctx context.Context, samples []dataset.Sample) (int, error) {
 	n := 0
 	var err error
 	for ; n < len(samples); n++ {
@@ -266,7 +266,7 @@ func (cw *csvWriter) Write(ctx context.Context, samples []set.Sample) (int, erro
 	return len(samples), nil
 }
 
-func (cw *csvWriter) WriteSample(sample set.Sample) error {
+func (cw *csvWriter) WriteSample(sample dataset.Sample) error {
 	record := make([]string, len(cw.features))
 	for j, f := range cw.features {
 		v, err := sample.ValueFor(f)

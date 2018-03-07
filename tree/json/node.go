@@ -37,7 +37,7 @@ MarshalJSONNode returns a slice of bytes with the node serialized to JSON and an
 A node serialization includes the following properties:
   * "id": a string with the id of the node
   * "parentId": a string with the id of the parent of the node
-  * "prediction": the prediction of the classFeature at this point in the tree
+  * "prediction": the prediction of the label at this point in the tree
   * "subtreeIds": an array with the ids of the nodes opening the subtrees under
   this node.
   * "criterion": the feature criterion for the node, that is, the constraint on
@@ -278,7 +278,7 @@ to contain a JSON object with the following fields:
 * "probabilities": a JSON object with string keys (values) and
 numeric (float64) values (probability of that value)
 * "weight": a number (integer) corresponding to the number of
-samples in the set from which the prediction was made.
+samples in the dataset from which the prediction was made.
 */
 func UnmarshalJSONPrediction(b []byte) (*tree.Prediction, error) {
 	jp := &jsonPrediction{}

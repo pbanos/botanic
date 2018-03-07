@@ -1,27 +1,27 @@
-package sqlset
+package dbdataset
 
 import (
 	"context"
 	"fmt"
 	"math"
 
+	"github.com/pbanos/botanic/dataset"
 	"github.com/pbanos/botanic/feature"
-	"github.com/pbanos/botanic/set"
 )
 
 /*
-Set is a set.Set to which samples can be added
+Set is a dataset.Dataset to which samples can be added
 
-Its AddSample takes a set.Sample and adds it to the set,
+Its AddSample takes a dataset.Sample and adds it to the dataset,
 returning an error if any errors occur or nil otherwise.
 */
 type Set interface {
-	set.Set
-	Write(context.Context, []set.Sample) (int, error)
-	Read(context.Context) (<-chan set.Sample, <-chan error)
+	dataset.Dataset
+	Write(context.Context, []dataset.Sample) (int, error)
+	Read(context.Context) (<-chan dataset.Sample, <-chan error)
 }
 
-type sqlSet struct {
+type dbSet struct {
 	db                    Adapter
 	features              []feature.Feature
 	criteria              []*FeatureCriterion
@@ -37,7 +37,7 @@ type sqlSet struct {
 
 /*
 Open takes an Adapter to a db backend and a slice of feature.Feature
-and returns a Set backed by the given adapter or an error if no set is
+and returns a Set backed by the given adapter or an error if no dataset is
 available through the given adapter.
 
 This function expects the adapter to have the samples and discrete value
@@ -45,7 +45,7 @@ tables already created, and the discrete value table initialized with all
 the values of the discrete features in the features slice.
 */
 func Open(ctx context.Context, dbAdapter Adapter, features []feature.Feature) (Set, error) {
-	ss := &sqlSet{db: dbAdapter, features: features}
+	ss := &dbSet{db: dbAdapter, features: features}
 	err := ss.initFeatureColumns()
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ created on the database, and that the discrete value table has all the
 values for the discrete features on the features slice.
 */
 func Create(ctx context.Context, dbAdapter Adapter, features []feature.Feature) (Set, error) {
-	ss := &sqlSet{db: dbAdapter, features: features}
+	ss := &dbSet{db: dbAdapter, features: features}
 	err := ss.initFeatureColumns()
 	if err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func Create(ctx context.Context, dbAdapter Adapter, features []feature.Feature) 
 	return ss, nil
 }
 
-func (ss *sqlSet) Count(ctx context.Context) (int, error) {
+func (ss *dbSet) Count(ctx context.Context) (int, error) {
 	if ss.count != nil {
 		return *ss.count, nil
 	}
@@ -89,7 +89,7 @@ func (ss *sqlSet) Count(ctx context.Context) (int, error) {
 	return result, err
 }
 
-func (ss *sqlSet) Entropy(ctx context.Context, f feature.Feature) (float64, error) {
+func (ss *dbSet) Entropy(ctx context.Context, f feature.Feature) (float64, error) {
 	if ss.entropy != nil {
 		return *ss.entropy, nil
 	}
@@ -127,7 +127,7 @@ func (ss *sqlSet) Entropy(ctx context.Context, f feature.Feature) (float64, erro
 	return result, nil
 }
 
-func (ss *sqlSet) FeatureValues(ctx context.Context, f feature.Feature) ([]interface{}, error) {
+func (ss *dbSet) FeatureValues(ctx context.Context, f feature.Feature) ([]interface{}, error) {
 	var err error
 	var result []interface{}
 	column, ok := ss.featureNamesColumns[f.Name()]
@@ -156,19 +156,19 @@ func (ss *sqlSet) FeatureValues(ctx context.Context, f feature.Feature) ([]inter
 	return result, nil
 }
 
-func (ss *sqlSet) Samples(ctx context.Context) ([]set.Sample, error) {
+func (ss *dbSet) Samples(ctx context.Context) ([]dataset.Sample, error) {
 	rawSamples, err := ss.db.ListSamples(ctx, ss.criteria, ss.dfColumns, ss.cfColumns)
 	if err != nil {
 		return nil, err
 	}
-	samples := make([]set.Sample, 0, len(rawSamples))
+	samples := make([]dataset.Sample, 0, len(rawSamples))
 	for _, s := range rawSamples {
 		samples = append(samples, &Sample{Values: s, DiscreteFeatureValues: ss.discreteValues, FeatureNamesColumns: ss.featureNamesColumns})
 	}
 	return samples, nil
 }
 
-func (ss *sqlSet) SubsetWith(ctx context.Context, fc feature.Criterion) (set.Set, error) {
+func (ss *dbSet) SubsetWith(ctx context.Context, fc feature.Criterion) (dataset.Dataset, error) {
 	rfc, err := NewFeatureCriteria(fc, ss.db.ColumnName, ss.inverseDiscreteValues)
 	if err != nil {
 		return nil, err
@@ -176,7 +176,7 @@ func (ss *sqlSet) SubsetWith(ctx context.Context, fc feature.Criterion) (set.Set
 	subsetCriteria := make([]*FeatureCriterion, 0, len(ss.criteria)+len(rfc))
 	subsetCriteria = append(subsetCriteria, ss.criteria...)
 	subsetCriteria = append(subsetCriteria, rfc...)
-	return &sqlSet{
+	return &dbSet{
 		db:                    ss.db,
 		features:              ss.features,
 		criteria:              subsetCriteria,
@@ -189,7 +189,7 @@ func (ss *sqlSet) SubsetWith(ctx context.Context, fc feature.Criterion) (set.Set
 	}, nil
 }
 
-func (ss *sqlSet) CountFeatureValues(ctx context.Context, f feature.Feature) (map[string]int, error) {
+func (ss *dbSet) CountFeatureValues(ctx context.Context, f feature.Feature) (map[string]int, error) {
 	result := make(map[string]int)
 	column, ok := ss.featureNamesColumns[f.Name()]
 	if !ok {
@@ -215,7 +215,7 @@ func (ss *sqlSet) CountFeatureValues(ctx context.Context, f feature.Feature) (ma
 	return result, nil
 }
 
-func (ss *sqlSet) Write(ctx context.Context, samples []set.Sample) (int, error) {
+func (ss *dbSet) Write(ctx context.Context, samples []dataset.Sample) (int, error) {
 	if len(samples) == 0 {
 		return 0, nil
 	}
@@ -230,8 +230,8 @@ func (ss *sqlSet) Write(ctx context.Context, samples []set.Sample) (int, error) 
 	return ss.db.AddSamples(ctx, rawSamples, ss.dfColumns, ss.cfColumns)
 }
 
-func (ss *sqlSet) Read(ctx context.Context) (<-chan set.Sample, <-chan error) {
-	sampleStream := make(chan set.Sample)
+func (ss *dbSet) Read(ctx context.Context) (<-chan dataset.Sample, <-chan error) {
+	sampleStream := make(chan dataset.Sample)
 	errStream := make(chan error)
 	go func() {
 		err := ss.db.IterateOnSamples(
@@ -264,7 +264,7 @@ func (ss *sqlSet) Read(ctx context.Context) (<-chan set.Sample, <-chan error) {
 	return sampleStream, errStream
 }
 
-func (ss *sqlSet) initDB(ctx context.Context) error {
+func (ss *dbSet) initDB(ctx context.Context) error {
 	err := ss.db.CreateDiscreteValuesTable(ctx)
 	if err != nil {
 		return err
@@ -289,7 +289,7 @@ func (ss *sqlSet) initDB(ctx context.Context) error {
 	return nil
 }
 
-func (ss *sqlSet) unavailableDiscreteValues() []string {
+func (ss *dbSet) unavailableDiscreteValues() []string {
 	var unavailableDiscreteValues []string
 	for _, f := range ss.features {
 		df, ok := f.(*feature.DiscreteFeature)
@@ -319,7 +319,7 @@ func (ss *sqlSet) unavailableDiscreteValues() []string {
 	return unavailableDiscreteValues
 }
 
-func (ss *sqlSet) init(ctx context.Context) error {
+func (ss *dbSet) init(ctx context.Context) error {
 	var err error
 	ss.discreteValues, err = ss.db.ListDiscreteValues(ctx)
 	if err != nil {
@@ -332,7 +332,7 @@ func (ss *sqlSet) init(ctx context.Context) error {
 	return nil
 }
 
-func (ss *sqlSet) newRawSample(s set.Sample) (map[string]interface{}, error) {
+func (ss *dbSet) newRawSample(s dataset.Sample) (map[string]interface{}, error) {
 	rs := make(map[string]interface{})
 	for _, f := range ss.features {
 		v, err := s.ValueFor(f)
@@ -354,7 +354,7 @@ func (ss *sqlSet) newRawSample(s set.Sample) (map[string]interface{}, error) {
 	return rs, nil
 }
 
-func (ss *sqlSet) initFeatureColumns() error {
+func (ss *dbSet) initFeatureColumns() error {
 	ss.columnFeatures = make(map[string]feature.Feature)
 	ss.featureNamesColumns = make(map[string]string)
 	for _, f := range ss.features {

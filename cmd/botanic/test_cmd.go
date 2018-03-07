@@ -6,13 +6,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/pbanos/botanic/dataset"
+	"github.com/pbanos/botanic/dataset/csv"
+	"github.com/pbanos/botanic/dataset/dbdataset"
+	"github.com/pbanos/botanic/dataset/dbdataset/pgadapter"
+	"github.com/pbanos/botanic/dataset/dbdataset/sqlite3adapter"
 	"github.com/pbanos/botanic/feature"
 	"github.com/pbanos/botanic/feature/yaml"
-	"github.com/pbanos/botanic/set"
-	"github.com/pbanos/botanic/set/csv"
-	"github.com/pbanos/botanic/set/sqlset"
-	"github.com/pbanos/botanic/set/sqlset/pgadapter"
-	"github.com/pbanos/botanic/set/sqlset/sqlite3adapter"
 	"github.com/spf13/cobra"
 )
 
@@ -52,10 +52,10 @@ func testCmd(treeConfig *treeCmdConfig) *cobra.Command {
 			}
 			count, err := testingSet.Count(config.Context())
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "counting testing set samples: %v\n", err)
+				fmt.Fprintf(os.Stderr, "counting testing dataset samples: %v\n", err)
 				os.Exit(5)
 			}
-			config.Logf("Testing tree against testset with %d samples...", count)
+			config.Logf("Testing tree against testdataset with %d samples...", count)
 			successRate, errorCount, err := tree.Test(config.Context(), testingSet)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "testing tree: %v\n", err)
@@ -80,10 +80,10 @@ func (tcc *testCmdConfig) Validate() error {
 	return nil
 }
 
-func (tcc *testCmdConfig) testingSet(features []feature.Feature) (set.Set, error) {
+func (tcc *testCmdConfig) testingSet(features []feature.Feature) (dataset.Dataset, error) {
 	var f *os.File
 	if tcc.dataInput == "" {
-		tcc.Logf("Reading testing set from STDIN...")
+		tcc.Logf("Reading testing dataset from STDIN...")
 		f = os.Stdin
 	} else {
 		if strings.HasPrefix(tcc.dataInput, "postgresql://") {
@@ -92,38 +92,38 @@ func (tcc *testCmdConfig) testingSet(features []feature.Feature) (set.Set, error
 		if strings.HasSuffix(tcc.dataInput, ".db") {
 			return tcc.Sqlite3TestingSet(features)
 		}
-		tcc.Logf("Opening %s to read testing set...", tcc.dataInput)
+		tcc.Logf("Opening %s to read testing dataset...", tcc.dataInput)
 		var err error
 		f, err = os.Open(tcc.dataInput)
 		if err != nil {
-			err = fmt.Errorf("opening testing set at %s: %v", tcc.dataInput, err)
+			err = fmt.Errorf("opening testing dataset at %s: %v", tcc.dataInput, err)
 			return nil, err
 		}
 		defer f.Close()
 	}
-	testingSet, err := csv.ReadSet(f, features, set.New)
+	testingSet, err := csv.ReadSet(f, features, dataset.New)
 	if err != nil {
-		return nil, fmt.Errorf("reading testing set: %v", err)
+		return nil, fmt.Errorf("reading testing dataset: %v", err)
 	}
 	return testingSet, nil
 }
 
-func (tcc *testCmdConfig) Sqlite3TestingSet(features []feature.Feature) (set.Set, error) {
-	tcc.Logf("Creating SQLite3 adapter for file %s to read testing set...", tcc.dataInput)
+func (tcc *testCmdConfig) Sqlite3TestingSet(features []feature.Feature) (dataset.Dataset, error) {
+	tcc.Logf("Creating SQLite3 adapter for file %s to read testing dataset...", tcc.dataInput)
 	adapter, err := sqlite3adapter.New(tcc.dataInput, 0)
 	if err != nil {
 		return nil, err
 	}
-	tcc.Logf("Opening set over SQLite3 adapter for file %s to read testing set...", tcc.dataInput)
-	return sqlset.Open(tcc.Context(), adapter, features)
+	tcc.Logf("Opening dataset over SQLite3 adapter for file %s to read testing dataset...", tcc.dataInput)
+	return dbdataset.Open(tcc.Context(), adapter, features)
 }
 
-func (tcc *testCmdConfig) PostgreSQLTestingSet(features []feature.Feature) (set.Set, error) {
-	tcc.Logf("Creating PostgreSQL adapter for url %s to read testing set...", tcc.dataInput)
+func (tcc *testCmdConfig) PostgreSQLTestingSet(features []feature.Feature) (dataset.Dataset, error) {
+	tcc.Logf("Creating PostgreSQL adapter for url %s to read testing dataset...", tcc.dataInput)
 	adapter, err := pgadapter.New(tcc.dataInput)
 	if err != nil {
 		return nil, err
 	}
-	tcc.Logf("Opening set over PostgreSQL adapter for url %s to read testing set...", tcc.dataInput)
-	return sqlset.Open(tcc.Context(), adapter, features)
+	tcc.Logf("Opening dataset over PostgreSQL adapter for url %s to read testing dataset...", tcc.dataInput)
+	return dbdataset.Open(tcc.Context(), adapter, features)
 }

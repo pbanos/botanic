@@ -30,7 +30,7 @@ Regression-tree library and tool written in Golang
 * Feature. In machine learning, a feature is 'an individual measurable property or characteristic of a phenomenon being observed' [according to Wikipedia](https://en.wikipedia.org/wiki/Feature_(machine_learning)). In botanic we distinguish between continuous features, which can take any real number value, and discrete features, which take values from a list of strings.
 * Sample. In botanic a sample represents a phenomenon being observed in terms of specific values for the features that are measured.
 * Set. In botanic a set is a compendium of samples. We usually start with a set that has all our data as samples and split it into a training set, with a majority of the samples and to be used for growing a tree, and a testing set, with a minority of the samples and to be used to test the grown tree.
-* Tree. A tree in botanic is a decision or regression tree, also known as Classification and Regression Tree (CART). With botanic you can grow trees that predict a discrete feature (called the class feature) training them with a set. Once they are grown, you can test them with another set to see how well they predict the class feature, and use them to predict the class feature of a sample.
+* Tree. A tree in botanic is a decision or regression tree, also known as Classification and Regression Tree (CART). With botanic you can grow trees that predict a discrete feature (called the label feature) training them with a set. Once they are grown, you can test them with another set to see how well they predict the label feature, and use them to predict the label feature of a sample.
 
 ## botanic CLI
 
@@ -196,7 +196,7 @@ Usage:
   botanic tree [command]
 
 Available Commands:
-  grow        Grow a tree from a set of data
+  grow        Grow a tree from a dataset
   predict     Predict a value for a sample answering questions
   test        Test the performance of a tree
 
@@ -222,18 +222,18 @@ botanic tree -m metadata.yml -t tree.json
 ```
 
 ##### Grow subcommand
-The `botanic tree grow` command grows a tree from an input set of data: the training set of data.
+The `botanic tree grow` command grows a tree from an input dataset: the training dataset.
 
 We can see the flags available for it running it with the `--help` or `-h` flag:
 ```
 $ botanic tree grow --help
-Grow a tree from a set of data to predict a certain feature.
+Grow a tree from a dataset to predict a certain feature.
 
 Usage:
   botanic tree grow [flags]
 
 Flags:
-  -c, --class-feature string   name of the feature the generated tree should predict (required)
+  -l, --label string           name of the feature the generated tree should predict (required)
       --concurrency int        limit to concurrent workers on the tree and on DB connections opened at a time (defaults to 1) (default 1)
       --cpu-intensive          force the use of cpu-intensive subsetting to decrease memory use at the cost of increasing time
   -h, --help                   help for grow
@@ -250,7 +250,7 @@ $
 
 To grow a tree we will probably have to specify:
 - an input or training set, with the `--input` or `-i` flag. This can be a CSV file, an SQLite3 file (with the .db) or a PostgreSQL URL. The default is a CSV set read from STDIN.
-- the class feature the tree has to predict, with the `--class-feature` or `-c`flag
+- the label feature the tree has to predict, with the `--label` or `-l`flag
 - the path to the metadata YAML file describing the features in the set, with the `--metadata` or `-m`flag
 
 The following optional flags can also be useful:
@@ -268,7 +268,7 @@ If the input or training set is in an SQLite3 database file, the flag `--max-db-
 
 For example, to grow a tree that predicts the Prediction feature, using the training set we generated before in the SQLite3 file train.db, our metadata.yml as metadata file and so that the output tree is written to a tree.json file we would run:
 ```Bash
-botanic tree grow -c Prediction -m metadata.yml -i train.db -o tree.json
+botanic tree grow -l Prediction -m metadata.yml -i train.db -o tree.json
 ```
 
 
@@ -306,12 +306,12 @@ The output could be similar to:
 The success rate indicates the rate of successful predictions over the number of samples in the training set, while the failures to make a prediction indicate the situation where the generated tree does not have data to make a prediction for a sample at all.
 
 ##### Predict subcommand
-The `botanic tree predict` subcommand can be used to predict the value for the class feature of a sample using a generated tree. The subcommand does not expect to have all available data for the sample, but rather will interact with the user to gather the values for the features as they are needed to traverse the tree.
+The `botanic tree predict` subcommand can be used to predict the value for the label feature of a sample using a generated tree. The subcommand does not expect to have all available data for the sample, but rather will interact with the user to gather the values for the features as they are needed to traverse the tree.
 
 We can see the flags available for the subcommand running it with the `--help` or `-h` flag:
 ```
 $ botanic tree predict --help
-Use the loaded tree to predict the class feature value for a sample answering a reduced set of question about its features
+Use the loaded tree to predict the label feature value for a sample answering a reduced set of question about its features
 
 Usage:
   botanic tree predict [flags]

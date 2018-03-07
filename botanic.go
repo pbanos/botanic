@@ -4,32 +4,32 @@ import (
 	"context"
 	"time"
 
+	"github.com/pbanos/botanic/dataset"
 	"github.com/pbanos/botanic/feature"
 	"github.com/pbanos/botanic/queue"
-	"github.com/pbanos/botanic/set"
 	"github.com/pbanos/botanic/tree"
 )
 
-// Seed takes a context, a class feature, a slice of features,
-// a set of data, a queue and a node store and sets everything
+// Seed takes a context, a label feature, a slice of features,
+// a dataset, a queue and a node store and sets everything
 // up so that workers that consume from the queue afterwards
-// grow a tree that predicts the given class feature using
+// grow a tree that predicts the given label feature using
 // the features in the given slice and according to the training
-// data on the given set.
+// data on the given dataset.
 // Specifically it will create the root node of the tree on the
 // node store and push a task to branch it out on the queue.
 // The function returns the tree that can be grown or an error
 // if the node cannot be created on the store, or the task pushed
 // to the queue (in the amount of time allowed by the given
 // context).
-func Seed(ctx context.Context, classFeature feature.Feature, features []feature.Feature, s set.Set, q queue.Queue, ns tree.NodeStore) (*tree.Tree, error) {
+func Seed(ctx context.Context, label feature.Feature, features []feature.Feature, s dataset.Dataset, q queue.Queue, ns tree.NodeStore) (*tree.Tree, error) {
 	n := &tree.Node{}
 	err := ns.Create(ctx, n)
 	if err != nil {
 		return nil, err
 	}
-	task := &queue.Task{Node: n, Set: s, AvailableFeatures: features}
-	t := tree.New(n.ID, ns, classFeature)
+	task := &queue.Task{Node: n, Dataset: s, AvailableFeatures: features}
+	t := tree.New(n.ID, ns, label)
 	err = q.Push(ctx, task)
 	if err != nil {
 		ns.Delete(ctx, n)
@@ -39,11 +39,11 @@ func Seed(ctx context.Context, classFeature feature.Feature, features []feature.
 }
 
 // BranchOut takes a context, a task, a tree and a pruning strategy,
-// develops the node in the task using the task's set and available
-// feature to predict the tree's class feature and returns a set of
+// develops the node in the task using the task's dataset and available
+// feature to predict the tree's label feature and returns a set of
 // tasks to develop the resulting children nodes or an error.
 func BranchOut(ctx context.Context, task *queue.Task, t *tree.Tree, ps *PruningStrategy) (tasks []*queue.Task, e error) {
-	prediction, err := tree.NewPredictionFromSet(ctx, task.Set, t.ClassFeature)
+	prediction, err := tree.NewPredictionFromSet(ctx, task.Dataset, t.Label)
 	if err != nil {
 		if err != tree.ErrCannotPredictFromEmptySet {
 			return nil, err
@@ -56,7 +56,7 @@ func BranchOut(ctx context.Context, task *queue.Task, t *tree.Tree, ps *PruningS
 		}
 	}()
 	task.Node.Prediction = prediction
-	sEntropy, err := task.Set.Entropy(ctx, t.ClassFeature)
+	sEntropy, err := task.Dataset.Entropy(ctx, t.Label)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func BranchOut(ctx context.Context, task *queue.Task, t *tree.Tree, ps *PruningS
 	var selectedPartition *Partition
 	var featureIndex int
 	for i, f := range task.AvailableFeatures {
-		part, err := partition(ctx, task.Set, f, t.ClassFeature, ps)
+		part, err := partition(ctx, task.Dataset, f, t.Label, ps)
 		if err != nil {
 			return nil, err
 		}
