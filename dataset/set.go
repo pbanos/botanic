@@ -34,11 +34,13 @@ type Dataset interface {
 	CountFeatureValues(context.Context, feature.Feature) (map[string]int, error)
 	Samples(context.Context) ([]Sample, error)
 	Count(context.Context) (int, error)
+	Criteria(context.Context) ([]feature.Criterion, error)
 }
 
 type memoryIntensiveSubsettingDataset struct {
-	entropy *float64
-	samples []Sample
+	entropy  *float64
+	samples  []Sample
+	criteria []feature.Criterion
 }
 
 type cpuIntensiveSubsettingDataset struct {
@@ -57,7 +59,7 @@ func New(samples []Sample) Dataset {
 	if len(samples) > sampleCountThresholdForDatasetImplementation {
 		return &cpuIntensiveSubsettingDataset{nil, nil, samples, []feature.Criterion{}}
 	}
-	return &memoryIntensiveSubsettingDataset{nil, samples}
+	return &memoryIntensiveSubsettingDataset{nil, samples, nil}
 }
 
 /*
@@ -67,7 +69,7 @@ replicates the slice of samples when subsetting to reduce
 calculations at the cost of increased memory.
 */
 func NewMemoryIntensive(samples []Sample) Dataset {
-	return &memoryIntensiveSubsettingDataset{nil, samples}
+	return &memoryIntensiveSubsettingDataset{nil, samples, nil}
 }
 
 /*
@@ -212,7 +214,7 @@ func (s *memoryIntensiveSubsettingDataset) SubsetWith(ctx context.Context, fc fe
 			samples = append(samples, sample)
 		}
 	}
-	return &memoryIntensiveSubsettingDataset{nil, samples}, nil
+	return &memoryIntensiveSubsettingDataset{nil, samples, append([]feature.Criterion{fc}, s.criteria...)}, nil
 }
 
 func (s *cpuIntensiveSubsettingDataset) SubsetWith(ctx context.Context, fc feature.Criterion) (Dataset, error) {
@@ -264,6 +266,14 @@ func (s *cpuIntensiveSubsettingDataset) CountFeatureValues(ctx context.Context, 
 		return nil, err
 	}
 	return result, nil
+}
+
+func (s *memoryIntensiveSubsettingDataset) Criteria(ctx context.Context) ([]feature.Criterion, error) {
+	return s.criteria, nil
+}
+
+func (s *cpuIntensiveSubsettingDataset) Criteria(ctx context.Context) ([]feature.Criterion, error) {
+	return s.criteria, nil
 }
 
 func (s *cpuIntensiveSubsettingDataset) iterateOnDataset(lambda func(Sample) (bool, error)) error {

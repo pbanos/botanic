@@ -24,7 +24,8 @@ type Set interface {
 type dbSet struct {
 	db                    Adapter
 	features              []feature.Feature
-	criteria              []*FeatureCriterion
+	criteria              []feature.Criterion
+	dbCriteria            []*FeatureCriterion
 	featureNamesColumns   map[string]string
 	columnFeatures        map[string]feature.Feature
 	discreteValues        map[int]string
@@ -82,7 +83,7 @@ func (ss *dbSet) Count(ctx context.Context) (int, error) {
 	if ss.count != nil {
 		return *ss.count, nil
 	}
-	result, err := ss.db.CountSamples(ctx, ss.criteria)
+	result, err := ss.db.CountSamples(ctx, ss.dbCriteria)
 	if err == nil {
 		ss.count = &result
 	}
@@ -99,7 +100,7 @@ func (ss *dbSet) Entropy(ctx context.Context, f feature.Feature) (float64, error
 		return 0.0, fmt.Errorf("unknown feature %s", f.Name())
 	}
 	if _, ok = f.(*feature.DiscreteFeature); ok {
-		featureValueCounts, err := ss.db.CountSampleDiscreteFeatureValues(ctx, column, ss.criteria)
+		featureValueCounts, err := ss.db.CountSampleDiscreteFeatureValues(ctx, column, ss.dbCriteria)
 		if err != nil {
 			return 0.0, err
 		}
@@ -111,7 +112,7 @@ func (ss *dbSet) Entropy(ctx context.Context, f feature.Feature) (float64, error
 			result -= probValue * math.Log(probValue)
 		}
 	} else {
-		featureValueCounts, err := ss.db.CountSampleContinuousFeatureValues(ctx, column, ss.criteria)
+		featureValueCounts, err := ss.db.CountSampleContinuousFeatureValues(ctx, column, ss.dbCriteria)
 		if err != nil {
 			return 0.0, err
 		}
@@ -136,7 +137,7 @@ func (ss *dbSet) FeatureValues(ctx context.Context, f feature.Feature) ([]interf
 	}
 	if _, ok = f.(*feature.DiscreteFeature); ok {
 		var values []int
-		values, err = ss.db.ListSampleDiscreteFeatureValues(ctx, column, ss.criteria)
+		values, err = ss.db.ListSampleDiscreteFeatureValues(ctx, column, ss.dbCriteria)
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +146,7 @@ func (ss *dbSet) FeatureValues(ctx context.Context, f feature.Feature) ([]interf
 		}
 	} else {
 		var values []float64
-		values, err = ss.db.ListSampleContinuousFeatureValues(ctx, column, ss.criteria)
+		values, err = ss.db.ListSampleContinuousFeatureValues(ctx, column, ss.dbCriteria)
 		if err != nil {
 			return nil, err
 		}
@@ -157,7 +158,7 @@ func (ss *dbSet) FeatureValues(ctx context.Context, f feature.Feature) ([]interf
 }
 
 func (ss *dbSet) Samples(ctx context.Context) ([]dataset.Sample, error) {
-	rawSamples, err := ss.db.ListSamples(ctx, ss.criteria, ss.dfColumns, ss.cfColumns)
+	rawSamples, err := ss.db.ListSamples(ctx, ss.dbCriteria, ss.dfColumns, ss.cfColumns)
 	if err != nil {
 		return nil, err
 	}
@@ -173,13 +174,18 @@ func (ss *dbSet) SubsetWith(ctx context.Context, fc feature.Criterion) (dataset.
 	if err != nil {
 		return nil, err
 	}
-	subsetCriteria := make([]*FeatureCriterion, 0, len(ss.criteria)+len(rfc))
+	subsetCriteria := make([]feature.Criterion, 0, len(ss.dbCriteria)+1)
+	subsetCriteria = append(subsetCriteria, fc)
 	subsetCriteria = append(subsetCriteria, ss.criteria...)
-	subsetCriteria = append(subsetCriteria, rfc...)
+
+	subsetDbCriteria := make([]*FeatureCriterion, 0, len(ss.dbCriteria)+len(rfc))
+	subsetDbCriteria = append(subsetDbCriteria, ss.dbCriteria...)
+	subsetDbCriteria = append(subsetDbCriteria, rfc...)
 	return &dbSet{
 		db:                    ss.db,
 		features:              ss.features,
 		criteria:              subsetCriteria,
+		dbCriteria:            subsetDbCriteria,
 		discreteValues:        ss.discreteValues,
 		inverseDiscreteValues: ss.inverseDiscreteValues,
 		featureNamesColumns:   ss.featureNamesColumns,
@@ -196,7 +202,7 @@ func (ss *dbSet) CountFeatureValues(ctx context.Context, f feature.Feature) (map
 		return nil, fmt.Errorf("unknown feature %s", f.Name())
 	}
 	if _, ok = f.(*feature.DiscreteFeature); ok {
-		featureValueCounts, err := ss.db.CountSampleDiscreteFeatureValues(ctx, column, ss.criteria)
+		featureValueCounts, err := ss.db.CountSampleDiscreteFeatureValues(ctx, column, ss.dbCriteria)
 		if err != nil {
 			return nil, err
 		}
@@ -204,7 +210,7 @@ func (ss *dbSet) CountFeatureValues(ctx context.Context, f feature.Feature) (map
 			result[ss.discreteValues[k]] = v
 		}
 	} else {
-		featureValueCounts, err := ss.db.CountSampleContinuousFeatureValues(ctx, column, ss.criteria)
+		featureValueCounts, err := ss.db.CountSampleContinuousFeatureValues(ctx, column, ss.dbCriteria)
 		if err != nil {
 			return nil, err
 		}
@@ -213,6 +219,10 @@ func (ss *dbSet) CountFeatureValues(ctx context.Context, f feature.Feature) (map
 		}
 	}
 	return result, nil
+}
+
+func (ss *dbSet) Criteria(ctx context.Context) ([]feature.Criterion, error) {
+	return ss.criteria, nil
 }
 
 func (ss *dbSet) Write(ctx context.Context, samples []dataset.Sample) (int, error) {
@@ -236,7 +246,7 @@ func (ss *dbSet) Read(ctx context.Context) (<-chan dataset.Sample, <-chan error)
 	go func() {
 		err := ss.db.IterateOnSamples(
 			ctx,
-			ss.criteria,
+			ss.dbCriteria,
 			ss.dfColumns,
 			ss.cfColumns,
 			func(n int, rs map[string]interface{}) (bool, error) {
