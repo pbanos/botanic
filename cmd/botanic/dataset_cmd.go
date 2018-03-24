@@ -44,8 +44,8 @@ func datasetCmd(rootConfig *rootCmdConfig) *cobra.Command {
 	config := &datasetCmdConfig{rootCmdConfig: rootConfig}
 	cmd := &cobra.Command{
 		Use:   "dataset",
-		Short: "Manage datasets of data",
-		Long:  `Manage datasets of data`,
+		Short: "Manage datasets",
+		Long:  `Manage datasets`,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := config.Validate()
 			if err != nil {

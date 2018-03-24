@@ -28,7 +28,7 @@ func testCmd(treeConfig *treeCmdConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "test",
 		Short: "Test the performance of a tree",
-		Long:  `Test the performance of a tree against a test data set`,
+		Long:  `Test the performance of a tree against a test dataset`,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := config.Validate()
 			if err != nil {
