@@ -147,6 +147,6 @@ features:
     - 'u'
     - 'w'
     - 'd'
-  class: #  Class - poisonous or edible
+  Label: #  Class - poisonous or edible
     - 'p'
     - 'e'

@@ -14,6 +14,6 @@ features:
   Marital Status:
     - married
     - single
-  Class:
+  Label:
     - "will buy"
     - "won't buy"

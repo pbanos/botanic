@@ -1,4 +1,4 @@
-"cap-shape","cap-surface","cap-colour","bruise","odor","attchmnt","spacing","size","colour","shape","root","sAbv","sBelw","cAbv","cBelw","vType","vColour","rNumber","rType","sColour","pop","habitat","class"
+"cap-shape","cap-surface","cap-colour","bruise","odor","attchmnt","spacing","size","colour","shape","root","sAbv","sBelw","cAbv","cBelw","vType","vColour","rNumber","rType","sColour","pop","habitat","Label"
 f,y,n,f,y,f,c,n,b,t,?,s,s,w,w,p,w,o,e,w,v,p,p
 x,s,b,t,f,f,c,b,h,t,b,s,s,w,w,p,w,o,p,h,s,u,p
 x,y,n,t,a,f,c,b,w,e,r,s,y,w,w,p,w,o,p,k,y,p,e

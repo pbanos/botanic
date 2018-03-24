@@ -1,4 +1,4 @@
-Age,Education,Income,Marital Status,Class
+Age,Education,Income,Marital Status,Label
 36 - 55,masters,high,single,will buy
 18 - 35,high school,low,single,won't buy
 36 - 55,masters,low,single,will buy

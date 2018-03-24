@@ -15,6 +15,6 @@ features:
   Fibrinogen: continuous
   Dimer: continuous
   FibPerDim: continuous
-  Class:
+  Label:
     - "healthy."
     - "colic."
