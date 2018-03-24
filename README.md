@@ -79,6 +79,7 @@ The `botanic set` command allows dumping an existing set of samples into an othe
 - CSV (as a file ending in .csv or by default read from STDIN or dumped to STDOUT if nothing is specified)
 - an SQLite3 database (specified as a file ending in .db)
 - a PostgreSQL database (specified as a [PostgreSQL Connection URI](https://www.postgresql.org/docs/current/static/libpq-connect.html#AEN45571))
+- a MongoDB databse (specified as a [MongoDB Connection URI](https://docs.mongodb.com/manual/reference/connection-string/))
 
 We can see the flags and subcommands available for it running it with the `--help` or `-h` flag:
 ```
@@ -94,9 +95,9 @@ Available Commands:
 
 Flags:
   -h, --help              help for set
-  -i, --input string      path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)
+  -i, --input string      path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)
   -m, --metadata string   path to a YML file with metadata describing the different features available available on the input file (required)
-  -o, --output string     path to a CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL to dump the output set (defaults to STDOUT in CSV)
+  -o, --output string     path to a CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL to dump the output set (defaults to STDOUT in CSV)
 
 Global Flags:
   -v, --verbose
@@ -164,13 +165,13 @@ Usage:
 
 Flags:
   -h, --help                    help for split
-  -s, --split-output string     path to a CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL to dump the output of the split set (required)
+  -s, --split-output string     path to a CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL to dump the output of the split set (required)
   -p, --split-probability int   probability as percent integer that a sample of the set will be assigned to the split set (default 20)
 
 Global Flags:
-  -i, --input string      path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)
+  -i, --input string      path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)
   -m, --metadata string   path to a YML file with metadata describing the different features available available on the input file (required)
-  -o, --output string     path to a CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL to dump the output set (defaults to STDOUT in CSV)
+  -o, --output string     path to a CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL to dump the output set (defaults to STDOUT in CSV)
   -v, --verbose
 $
 ```
@@ -237,7 +238,7 @@ Flags:
       --concurrency int        limit to concurrent workers on the tree and on DB connections opened at a time (defaults to 1) (default 1)
       --cpu-intensive          force the use of cpu-intensive subsetting to decrease memory use at the cost of increasing time
   -h, --help                   help for grow
-  -i, --input string           path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)
+  -i, --input string           path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)
       --memory-intensive       force the use of memory-intensive subsetting to decrease time at the cost of increasing memory use
   -o, --output string          path to a file to which the generated tree will be written in JSON format (defaults to STDOUT)
   -p, --prune string           pruning strategy to apply, the following are valid: default, minimum-information-gain:[VALUE], none (default "default")
@@ -285,7 +286,7 @@ Usage:
 
 Flags:
   -h, --help           help for test
-  -i, --input string   path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)
+  -i, --input string   path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)
   -t, --tree string    path to a file from which the tree to test will be read and parsed as JSON (required)
 
 Global Flags:

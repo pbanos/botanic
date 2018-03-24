@@ -8,12 +8,14 @@ import (
 
 	"github.com/pbanos/botanic/dataset"
 	"github.com/pbanos/botanic/dataset/csv"
-	"github.com/pbanos/botanic/dataset/dbdataset"
-	"github.com/pbanos/botanic/dataset/dbdataset/pgadapter"
-	"github.com/pbanos/botanic/dataset/dbdataset/sqlite3adapter"
+	"github.com/pbanos/botanic/dataset/mongodataset"
+	"github.com/pbanos/botanic/dataset/sqldataset"
+	"github.com/pbanos/botanic/dataset/sqldataset/pgadapter"
+	"github.com/pbanos/botanic/dataset/sqldataset/sqlite3adapter"
 	"github.com/pbanos/botanic/feature"
 	"github.com/pbanos/botanic/feature/yaml"
 	"github.com/spf13/cobra"
+	mgo "gopkg.in/mgo.v2"
 )
 
 type datasetCmdConfig struct {
@@ -96,9 +98,9 @@ func datasetCmd(rootConfig *rootCmdConfig) *cobra.Command {
 			config.Logf("Done")
 		},
 	}
-	cmd.PersistentFlags().StringVarP(&(config.datasetInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
+	cmd.PersistentFlags().StringVarP(&(config.datasetInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
 	cmd.PersistentFlags().StringVarP(&(config.metadataInput), "metadata", "m", "", "path to a YML file with metadata describing the different features available available on the input file (required)")
-	cmd.PersistentFlags().StringVarP(&(config.datasetOutput), "output", "o", "", "path to a CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL to dump the output dataset (defaults to STDOUT in CSV)")
+	cmd.PersistentFlags().StringVarP(&(config.datasetOutput), "output", "o", "", "path to a CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL to dump the output dataset (defaults to STDOUT in CSV)")
 	cmd.AddCommand(splitCmd(config))
 	return cmd
 }
@@ -116,6 +118,9 @@ func (scc *datasetCmdConfig) OutputWriter(features []feature.Feature) (writableS
 	if scc.datasetOutput != "" {
 		if strings.HasPrefix(scc.datasetOutput, "postgresql://") {
 			return scc.PostgreSQLOutputWriter(features)
+		}
+		if strings.HasPrefix(scc.datasetOutput, "mongodb://") {
+			return scc.MongoOutputWriter(features)
 		}
 		if strings.HasSuffix(scc.datasetOutput, ".db") {
 			return scc.Sqlite3OutputWriter(features)
@@ -145,6 +150,9 @@ func (scc *datasetCmdConfig) InputStream(features []feature.Feature) (<-chan dat
 	} else {
 		if strings.HasPrefix(scc.datasetInput, "postgresql://") {
 			return scc.PostgreSQLInputStream(features)
+		}
+		if strings.HasPrefix(scc.datasetInput, "mongodb://") {
+			return scc.MongoInputStream(features)
 		}
 		if strings.HasSuffix(scc.datasetInput, ".db") {
 			return scc.Sqlite3InputStream(features)
@@ -190,7 +198,21 @@ func (scc *datasetCmdConfig) Sqlite3InputStream(features []feature.Feature) (<-c
 		return nil, nil, err
 	}
 	scc.Logf("Opening dataset over SQLite3 adapter for file %s to read input dataset...", scc.datasetInput)
-	dataset, err := dbdataset.Open(scc.Context(), adapter, features)
+	dataset, err := sqldataset.Open(scc.Context(), adapter, features)
+	if err != nil {
+		return nil, nil, err
+	}
+	sampleStream, errStream := dataset.Read(scc.Context())
+	return sampleStream, errStream, nil
+}
+
+func (scc *datasetCmdConfig) MongoInputStream(features []feature.Feature) (<-chan dataset.Sample, <-chan error, error) {
+	scc.Logf("Opening dataset over MongoDB at url %s to read input dataset...", scc.datasetInput)
+	msession, err := mgo.Dial(scc.datasetInput)
+	if err != nil {
+		return nil, nil, err
+	}
+	dataset, err := mongodataset.Open(scc.Context(), msession, features)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -205,7 +227,7 @@ func (scc *datasetCmdConfig) PostgreSQLInputStream(features []feature.Feature) (
 		return nil, nil, err
 	}
 	scc.Logf("Opening dataset over PostgreSQL adapter for url %s to read input dataset...", scc.datasetInput)
-	dataset, err := dbdataset.Open(scc.Context(), adapter, features)
+	dataset, err := sqldataset.Open(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -220,7 +242,7 @@ func (scc *datasetCmdConfig) Sqlite3OutputWriter(features []feature.Feature) (wr
 		return nil, err
 	}
 	scc.Logf("Opening dataset over SQLite3 adapter for file %s to dump output dataset...", scc.datasetOutput)
-	dataset, err := dbdataset.Create(scc.Context(), adapter, features)
+	dataset, err := sqldataset.Create(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +256,20 @@ func (scc *datasetCmdConfig) PostgreSQLOutputWriter(features []feature.Feature) 
 		return nil, err
 	}
 	scc.Logf("Opening dataset over PostgreSQL adapter for url %s to dump output dataset...", scc.datasetOutput)
-	dataset, err := dbdataset.Create(scc.Context(), adapter, features)
+	dataset, err := sqldataset.Create(scc.Context(), adapter, features)
+	if err != nil {
+		return nil, err
+	}
+	return &flushableSampleWriter{dataset}, nil
+}
+
+func (scc *datasetCmdConfig) MongoOutputWriter(features []feature.Feature) (writableSet, error) {
+	scc.Logf("Opening dataset over MongoDB at url %s to dump output dataset...", scc.datasetOutput)
+	msession, err := mgo.Dial(scc.datasetOutput)
+	if err != nil {
+		return nil, err
+	}
+	dataset, err := mongodataset.Open(scc.Context(), msession, features)
 	if err != nil {
 		return nil, err
 	}

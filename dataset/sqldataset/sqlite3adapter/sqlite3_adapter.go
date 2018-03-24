@@ -1,9 +1,9 @@
 /*
-Package pgadapter provides an implementation of the
-Adapter interface in the dbdataset package that works
-over a PostgreSQL database.
+Package sqlite3adapter provides an implementation of the
+Adapter interface in the sqldataset package that works
+over a SQLite3 database.
 */
-package pgadapter
+package sqlite3adapter
 
 import (
 	"bytes"
@@ -12,15 +12,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pbanos/botanic/dataset/dbdataset"
+	"github.com/pbanos/botanic/dataset/sqldataset"
 
-	// Import of PostgreSQL driver
-	_ "github.com/lib/pq"
+	// Import of sqlite3 driver
+	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
 	discreteValueTableCreateStmt = `CREATE TABLE IF NOT EXISTS discreteValues (
-		id SERIAL PRIMARY KEY,
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		value TEXT UNIQUE NOT NULL)`
 
 	// MaxDiscreteValueInsertionsPerStatement is the maximum number
@@ -41,14 +41,20 @@ type adapter struct {
 }
 
 /*
-New takes a PostgreSQL database connection URL and returns
-an Adapter that works on the database or an error if it fails to connect to it.
+New takes a path to an SQLite3 database file and a maxConn integer and returns
+an Adapter that works on the file's database or an error if it fails to open as
+an sqlite3 database.
+If the given maxConn is greater than 0, it will be the maximum concurrent
+connections to the database that will be used.
+This limit is useful when the OS limits the number of files a process
+can open, which is the case for Mac OS X.
 */
-func New(url string) (dbdataset.Adapter, error) {
-	db, err := sql.Open("postgres", url)
+func New(path string, maxConn int) (sqldataset.Adapter, error) {
+	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, err
 	}
+	db.SetMaxOpenConns(maxConn)
 	return &adapter{db}, nil
 }
 
@@ -77,6 +83,10 @@ func (a *adapter) CreateDiscreteValuesTable(ctx context.Context) error {
 
 func (a *adapter) CreateSampleTable(ctx context.Context, discreteFeatureColumns, continuousFeatureColumns []string) error {
 	var createStmtBuf bytes.Buffer
+	_, err := a.db.ExecContext(ctx, "PRAGMA foreign_keys=ON")
+	if err != nil {
+		return err
+	}
 	createStmtBuf.WriteString("CREATE TABLE IF NOT EXISTS samples(")
 	for _, c := range discreteFeatureColumns {
 		createStmtBuf.WriteString(fmt.Sprintf(`"%s" INTEGER NULL REFERENCES discreteValues(id), `, c))
@@ -84,7 +94,7 @@ func (a *adapter) CreateSampleTable(ctx context.Context, discreteFeatureColumns,
 	for _, c := range continuousFeatureColumns {
 		createStmtBuf.WriteString(fmt.Sprintf(`"%s" REAL NULL, `, c))
 	}
-	createStmtBuf.WriteString(`"id" SERIAL PRIMARY KEY)`)
+	createStmtBuf.WriteString(`"id" INTEGER PRIMARY KEY AUTOINCREMENT)`)
 	createStmt, err := a.db.PrepareContext(ctx, createStmtBuf.String())
 	if err != nil {
 		return fmt.Errorf("preparing samples creation statement: %v", err)
@@ -106,11 +116,11 @@ func (a *adapter) AddDiscreteValues(ctx context.Context, values []string) (int, 
 	if len(values) == 0 {
 		return 0, nil
 	}
-	insertStmtStart := "INSERT INTO discreteValues (value) VALUES ($1)"
+	insertStmtStart := "INSERT INTO discreteValues (value) VALUES (?)"
 	if len(values) > MaxDiscreteValueInsertionsPerStatement {
 		insertStmtBuffer.WriteString(insertStmtStart)
 		for i := 1; i < MaxDiscreteValueInsertionsPerStatement; i++ {
-			insertStmtBuffer.WriteString(fmt.Sprintf(", ($%d)", i+1))
+			insertStmtBuffer.WriteString(", (?)")
 		}
 		insertStmt, err := a.db.PrepareContext(ctx, insertStmtBuffer.String())
 		if err != nil {
@@ -139,7 +149,7 @@ func (a *adapter) AddDiscreteValues(ctx context.Context, values []string) (int, 
 		insertStmtBuffer = bytes.Buffer{}
 		insertStmtBuffer.WriteString(insertStmtStart)
 		for i := 1; i < len(lastValues); i++ {
-			insertStmtBuffer.WriteString(fmt.Sprintf(", ($%d)", i+1))
+			insertStmtBuffer.WriteString(", (?)")
 		}
 		insertStmt, err := a.db.PrepareContext(ctx, insertStmtBuffer.String())
 		if err != nil {
@@ -203,18 +213,18 @@ func (a *adapter) AddSamples(ctx context.Context, rawSamples []map[string]interf
 		insertStmtStartBuffer.WriteString(`", "`)
 	}
 	insertStmtStartBuffer.WriteString(strings.Join(continuousFeatureColumns, `", "`))
-	insertStmtStartBuffer.WriteString(`") VALUES ($1`)
+	insertStmtStartBuffer.WriteString(`") VALUES (?`)
 	for i := 1; i < len(discreteFeatureColumns)+len(continuousFeatureColumns); i++ {
-		insertStmtStartBuffer.WriteString(fmt.Sprintf(", $%d", i+1))
+		insertStmtStartBuffer.WriteString(", ?")
 	}
 	insertStmtStartBuffer.WriteString(`)`)
 	insertStmtStart := insertStmtStartBuffer.String()
 	if len(rawSamples) > MaxSampleInsertionsPerStatement {
 		insertStmtBuffer.WriteString(insertStmtStart)
 		for i := 1; i < MaxSampleInsertionsPerStatement; i++ {
-			insertStmtBuffer.WriteString(fmt.Sprintf(", ($%d", 1+i*(len(discreteFeatureColumns)+len(continuousFeatureColumns))))
+			insertStmtBuffer.WriteString(", (?")
 			for j := 1; j < len(discreteFeatureColumns)+len(continuousFeatureColumns); j++ {
-				insertStmtStartBuffer.WriteString(fmt.Sprintf(", $%d", j+1+i*(len(discreteFeatureColumns)+len(continuousFeatureColumns))))
+				insertStmtStartBuffer.WriteString(", ?")
 			}
 			insertStmtStartBuffer.WriteString(`)`)
 		}
@@ -250,9 +260,9 @@ func (a *adapter) AddSamples(ctx context.Context, rawSamples []map[string]interf
 		insertStmtBuffer = bytes.Buffer{}
 		insertStmtBuffer.WriteString(insertStmtStart)
 		for i := 1; i < len(lastRawSamples); i++ {
-			insertStmtBuffer.WriteString(fmt.Sprintf(", ($%d", 1+i*(len(discreteFeatureColumns)+len(continuousFeatureColumns))))
+			insertStmtBuffer.WriteString(", (?")
 			for j := 1; j < len(discreteFeatureColumns)+len(continuousFeatureColumns); j++ {
-				insertStmtStartBuffer.WriteString(fmt.Sprintf(", $%d", j+1+i*(len(discreteFeatureColumns)+len(continuousFeatureColumns))))
+				insertStmtStartBuffer.WriteString(", ?")
 			}
 			insertStmtStartBuffer.WriteString(`)`)
 		}
@@ -281,7 +291,7 @@ func (a *adapter) AddSamples(ctx context.Context, rawSamples []map[string]interf
 	return chunkEnd, nil
 }
 
-func (a *adapter) ListSamples(ctx context.Context, criteria []*dbdataset.FeatureCriterion, discreteFeatureColumns, continuousFeatureColumns []string) ([]map[string]interface{}, error) {
+func (a *adapter) ListSamples(ctx context.Context, criteria []*sqldataset.FeatureCriterion, discreteFeatureColumns, continuousFeatureColumns []string) ([]map[string]interface{}, error) {
 	var result []map[string]interface{}
 	err := a.IterateOnSamples(
 		ctx,
@@ -298,7 +308,7 @@ func (a *adapter) ListSamples(ctx context.Context, criteria []*dbdataset.Feature
 	return result, nil
 }
 
-func (a *adapter) IterateOnSamples(ctx context.Context, criteria []*dbdataset.FeatureCriterion, discreteFeatureColumns, continuousFeatureColumns []string, lambda func(int, map[string]interface{}) (bool, error)) error {
+func (a *adapter) IterateOnSamples(ctx context.Context, criteria []*sqldataset.FeatureCriterion, discreteFeatureColumns, continuousFeatureColumns []string, lambda func(int, map[string]interface{}) (bool, error)) error {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(`SELECT "`)
@@ -358,7 +368,7 @@ func (a *adapter) IterateOnSamples(ctx context.Context, criteria []*dbdataset.Fe
 	return err
 }
 
-func (a *adapter) CountSamples(ctx context.Context, criteria []*dbdataset.FeatureCriterion) (int, error) {
+func (a *adapter) CountSamples(ctx context.Context, criteria []*sqldataset.FeatureCriterion) (int, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(`SELECT COUNT(*) FROM samples`)
@@ -383,7 +393,7 @@ func (a *adapter) CountSamples(ctx context.Context, criteria []*dbdataset.Featur
 	return count, err
 }
 
-func (a *adapter) ListSampleDiscreteFeatureValues(ctx context.Context, fc string, criteria []*dbdataset.FeatureCriterion) ([]int, error) {
+func (a *adapter) ListSampleDiscreteFeatureValues(ctx context.Context, fc string, criteria []*sqldataset.FeatureCriterion) ([]int, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(fmt.Sprintf(`SELECT DISTINCT "%s" FROM samples`, fc))
@@ -415,7 +425,7 @@ func (a *adapter) ListSampleDiscreteFeatureValues(ctx context.Context, fc string
 	return result, err
 }
 
-func (a *adapter) ListSampleContinuousFeatureValues(ctx context.Context, fc string, criteria []*dbdataset.FeatureCriterion) ([]float64, error) {
+func (a *adapter) ListSampleContinuousFeatureValues(ctx context.Context, fc string, criteria []*sqldataset.FeatureCriterion) ([]float64, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(fmt.Sprintf(`SELECT DISTINCT "%s" FROM samples`, fc))
@@ -447,7 +457,7 @@ func (a *adapter) ListSampleContinuousFeatureValues(ctx context.Context, fc stri
 	return result, err
 }
 
-func (a *adapter) CountSampleDiscreteFeatureValues(ctx context.Context, fc string, criteria []*dbdataset.FeatureCriterion) (map[int]int, error) {
+func (a *adapter) CountSampleDiscreteFeatureValues(ctx context.Context, fc string, criteria []*sqldataset.FeatureCriterion) (map[int]int, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(fmt.Sprintf(`SELECT "%s", COUNT("%s") FROM samples`, fc, fc))
@@ -481,7 +491,7 @@ func (a *adapter) CountSampleDiscreteFeatureValues(ctx context.Context, fc strin
 	return result, err
 }
 
-func (a *adapter) CountSampleContinuousFeatureValues(ctx context.Context, fc string, criteria []*dbdataset.FeatureCriterion) (map[float64]int, error) {
+func (a *adapter) CountSampleContinuousFeatureValues(ctx context.Context, fc string, criteria []*sqldataset.FeatureCriterion) (map[float64]int, error) {
 	var queryBuffer bytes.Buffer
 	var whereValues []interface{}
 	queryBuffer.WriteString(fmt.Sprintf(`SELECT "%s", COUNT("%s") FROM samples`, fc, fc))
@@ -515,17 +525,17 @@ func (a *adapter) CountSampleContinuousFeatureValues(ctx context.Context, fc str
 	return result, err
 }
 
-func buildWhereClause(criteria []*dbdataset.FeatureCriterion) (string, []interface{}) {
+func buildWhereClause(criteria []*sqldataset.FeatureCriterion) (string, []interface{}) {
 	if len(criteria) == 0 {
 		return "", nil
 	}
 	var buf bytes.Buffer
 	values := make([]interface{}, 0, len(criteria))
 	buf.WriteString(" WHERE ")
-	buf.WriteString(fmt.Sprintf(`"%s" %s $1`, criteria[0].FeatureColumn, criteria[0].Operator))
+	buf.WriteString(fmt.Sprintf(`"%s" %s ?`, criteria[0].FeatureColumn, criteria[0].Operator))
 	values = append(values, criteria[0].Value)
 	for i := 1; i < len(criteria); i++ {
-		buf.WriteString(fmt.Sprintf(`AND "%s" %s $%d`, criteria[i].FeatureColumn, criteria[i].Operator, i+1))
+		buf.WriteString(fmt.Sprintf(`AND "%s" %s ?`, criteria[i].FeatureColumn, criteria[i].Operator))
 		values = append(values, criteria[i].Value)
 	}
 	return buf.String(), values

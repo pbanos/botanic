@@ -11,15 +11,17 @@ import (
 	"github.com/pbanos/botanic"
 	"github.com/pbanos/botanic/dataset"
 	"github.com/pbanos/botanic/dataset/csv"
-	"github.com/pbanos/botanic/dataset/dbdataset"
-	"github.com/pbanos/botanic/dataset/dbdataset/pgadapter"
-	"github.com/pbanos/botanic/dataset/dbdataset/sqlite3adapter"
+	"github.com/pbanos/botanic/dataset/mongodataset"
+	"github.com/pbanos/botanic/dataset/sqldataset"
+	"github.com/pbanos/botanic/dataset/sqldataset/pgadapter"
+	"github.com/pbanos/botanic/dataset/sqldataset/sqlite3adapter"
 	"github.com/pbanos/botanic/feature"
 	"github.com/pbanos/botanic/feature/yaml"
 	"github.com/pbanos/botanic/queue"
 	"github.com/pbanos/botanic/tree"
 	"github.com/pbanos/botanic/tree/json"
 	"github.com/spf13/cobra"
+	mgo "gopkg.in/mgo.v2"
 )
 
 type growCmdConfig struct {
@@ -109,7 +111,7 @@ func growCmd(treeConfig *treeCmdConfig) *cobra.Command {
 			}
 		},
 	}
-	cmd.PersistentFlags().StringVarP(&(config.dataInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
+	cmd.PersistentFlags().StringVarP(&(config.dataInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
 	cmd.PersistentFlags().StringVarP(&(config.output), "output", "o", "", "path to a file to which the generated tree will be written in JSON format (defaults to STDOUT)")
 	cmd.PersistentFlags().StringVarP(&(config.label), "label", "l", "", "name of the feature the generated tree should predict (required)")
 	cmd.PersistentFlags().StringVarP(&(config.pruneStrategy), "prune", "p", "default", "pruning strategy to apply, the following are valid: default, minimum-information-gain:[VALUE], none")
@@ -154,6 +156,9 @@ func (gcc *growCmdConfig) trainingSet(features []feature.Feature) (dataset.Datas
 		if strings.HasPrefix(gcc.dataInput, "postgresql://") {
 			return gcc.PostgreSQLTrainingSet(features)
 		}
+		if strings.HasPrefix(gcc.dataInput, "mongodb://") {
+			return gcc.MongoTrainingSet(features)
+		}
 		if strings.HasSuffix(gcc.dataInput, ".db") {
 			return gcc.Sqlite3TrainingSet(features)
 		}
@@ -180,7 +185,7 @@ func (gcc *growCmdConfig) Sqlite3TrainingSet(features []feature.Feature) (datase
 		return nil, err
 	}
 	gcc.Logf("Opening dataset over SQLite3 adapter for file %s to read training dataset...", gcc.dataInput)
-	return dbdataset.Open(gcc.Context(), adapter, features)
+	return sqldataset.Open(gcc.Context(), adapter, features)
 }
 
 func (gcc *growCmdConfig) PostgreSQLTrainingSet(features []feature.Feature) (dataset.Dataset, error) {
@@ -190,7 +195,16 @@ func (gcc *growCmdConfig) PostgreSQLTrainingSet(features []feature.Feature) (dat
 		return nil, err
 	}
 	gcc.Logf("Opening dataset over PostgreSQL adapter for url %s to read training dataset...", gcc.dataInput)
-	return dbdataset.Open(gcc.Context(), adapter, features)
+	return sqldataset.Open(gcc.Context(), adapter, features)
+}
+
+func (gcc *growCmdConfig) MongoTrainingSet(features []feature.Feature) (dataset.Dataset, error) {
+	gcc.Logf("Opening dataset over MongoDB at url %s to read training dataset...", gcc.dataInput)
+	msession, err := mgo.Dial(gcc.dataInput)
+	if err != nil {
+		return nil, err
+	}
+	return mongodataset.Open(gcc.Context(), msession, features)
 }
 
 func (gcc *growCmdConfig) Context() context.Context {

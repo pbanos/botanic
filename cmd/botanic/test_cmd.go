@@ -8,12 +8,14 @@ import (
 
 	"github.com/pbanos/botanic/dataset"
 	"github.com/pbanos/botanic/dataset/csv"
-	"github.com/pbanos/botanic/dataset/dbdataset"
-	"github.com/pbanos/botanic/dataset/dbdataset/pgadapter"
-	"github.com/pbanos/botanic/dataset/dbdataset/sqlite3adapter"
+	"github.com/pbanos/botanic/dataset/mongodataset"
+	"github.com/pbanos/botanic/dataset/sqldataset"
+	"github.com/pbanos/botanic/dataset/sqldataset/pgadapter"
+	"github.com/pbanos/botanic/dataset/sqldataset/sqlite3adapter"
 	"github.com/pbanos/botanic/feature"
 	"github.com/pbanos/botanic/feature/yaml"
 	"github.com/spf13/cobra"
+	mgo "gopkg.in/mgo.v2"
 )
 
 type testCmdConfig struct {
@@ -65,7 +67,7 @@ func testCmd(treeConfig *treeCmdConfig) *cobra.Command {
 			fmt.Printf("%f success rate, failed to make a prediction for %d samples\n", successRate, errorCount)
 		},
 	}
-	cmd.PersistentFlags().StringVarP(&(config.dataInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
+	cmd.PersistentFlags().StringVarP(&(config.dataInput), "input", "i", "", "path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)")
 	cmd.PersistentFlags().StringVarP(&(config.treeInput), "tree", "t", "", "path to a file from which the tree to test will be read and parsed as JSON (required)")
 	return cmd
 }
@@ -88,6 +90,9 @@ func (tcc *testCmdConfig) testingSet(features []feature.Feature) (dataset.Datase
 	} else {
 		if strings.HasPrefix(tcc.dataInput, "postgresql://") {
 			return tcc.PostgreSQLTestingSet(features)
+		}
+		if strings.HasPrefix(tcc.dataInput, "mongodb://") {
+			return tcc.MongoTestingSet(features)
 		}
 		if strings.HasSuffix(tcc.dataInput, ".db") {
 			return tcc.Sqlite3TestingSet(features)
@@ -115,7 +120,7 @@ func (tcc *testCmdConfig) Sqlite3TestingSet(features []feature.Feature) (dataset
 		return nil, err
 	}
 	tcc.Logf("Opening dataset over SQLite3 adapter for file %s to read testing dataset...", tcc.dataInput)
-	return dbdataset.Open(tcc.Context(), adapter, features)
+	return sqldataset.Open(tcc.Context(), adapter, features)
 }
 
 func (tcc *testCmdConfig) PostgreSQLTestingSet(features []feature.Feature) (dataset.Dataset, error) {
@@ -125,5 +130,14 @@ func (tcc *testCmdConfig) PostgreSQLTestingSet(features []feature.Feature) (data
 		return nil, err
 	}
 	tcc.Logf("Opening dataset over PostgreSQL adapter for url %s to read testing dataset...", tcc.dataInput)
-	return dbdataset.Open(tcc.Context(), adapter, features)
+	return sqldataset.Open(tcc.Context(), adapter, features)
+}
+
+func (tcc *testCmdConfig) MongoTestingSet(features []feature.Feature) (dataset.Dataset, error) {
+	tcc.Logf("Opening dataset over MongoDB at url %s to read testing dataset...", tcc.dataInput)
+	msession, err := mgo.Dial(tcc.dataInput)
+	if err != nil {
+		return nil, err
+	}
+	return mongodataset.Open(tcc.Context(), msession, features)
 }

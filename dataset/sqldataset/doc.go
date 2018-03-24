@@ -1,5 +1,5 @@
 /*
-Package dbdataset provides implementations of dataset.Dataset
+Package sqldataset provides implementations of dataset.Dataset
 that use SQL database as backends.
 
 The dataset uses 2 database tables:
@@ -10,4 +10,4 @@ Samples are stored on the samples database, with
 their discrete values as references to values in the
 discrete value table.
 */
-package dbdataset
+package sqldataset

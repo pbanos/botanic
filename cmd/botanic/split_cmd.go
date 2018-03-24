@@ -9,12 +9,14 @@ import (
 
 	"github.com/pbanos/botanic/dataset"
 	"github.com/pbanos/botanic/dataset/csv"
-	"github.com/pbanos/botanic/dataset/dbdataset"
-	"github.com/pbanos/botanic/dataset/dbdataset/pgadapter"
-	"github.com/pbanos/botanic/dataset/dbdataset/sqlite3adapter"
+	"github.com/pbanos/botanic/dataset/mongodataset"
+	"github.com/pbanos/botanic/dataset/sqldataset"
+	"github.com/pbanos/botanic/dataset/sqldataset/pgadapter"
+	"github.com/pbanos/botanic/dataset/sqldataset/sqlite3adapter"
 	"github.com/pbanos/botanic/feature"
 	"github.com/pbanos/botanic/feature/yaml"
 	"github.com/spf13/cobra"
+	mgo "gopkg.in/mgo.v2"
 )
 
 type splitCmdConfig struct {
@@ -110,7 +112,7 @@ func splitCmd(datasetConfig *datasetCmdConfig) *cobra.Command {
 		},
 	}
 	cmd.PersistentFlags().IntVarP(&(config.splitProbability), "split-probability", "p", 20, "probability as percent integer that a sample of the dataset will be assigned to the split dataset")
-	cmd.PersistentFlags().StringVarP(&(config.splitOutput), "split-output", "s", "", "path to a CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL DB connection URL to dump the output of the split dataset (required)")
+	cmd.PersistentFlags().StringVarP(&(config.splitOutput), "split-output", "s", "", "path to a CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL to dump the output of the split dataset (required)")
 	return cmd
 }
 
@@ -118,6 +120,9 @@ func (scc *splitCmdConfig) SplitOutputWriter(features []feature.Feature) (writab
 	var splitOutputFile *os.File
 	if strings.HasPrefix(scc.splitOutput, "postgresql://") {
 		return scc.PostgreSQLSplitOutputWriter(features)
+	}
+	if strings.HasPrefix(scc.splitOutput, "mongodb://") {
+		return scc.MongoSplitOutputWriter(features)
 	}
 	if strings.HasSuffix(scc.splitOutput, ".db") {
 		return scc.Sqlite3SplitOutputWriter(features)
@@ -152,7 +157,7 @@ func (scc *splitCmdConfig) Sqlite3SplitOutputWriter(features []feature.Feature) 
 		return nil, err
 	}
 	scc.Logf("Opening dataset over SQLite3 adapter for file %s to dump split dataset...", scc.splitOutput)
-	dataset, err := dbdataset.Create(scc.Context(), adapter, features)
+	dataset, err := sqldataset.Create(scc.Context(), adapter, features)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +171,20 @@ func (scc *splitCmdConfig) PostgreSQLSplitOutputWriter(features []feature.Featur
 		return nil, err
 	}
 	scc.Logf("Opening dataset over PostgreSQL adapter for url %s to dump split dataset...", scc.splitOutput)
-	dataset, err := dbdataset.Create(scc.Context(), adapter, features)
+	dataset, err := sqldataset.Create(scc.Context(), adapter, features)
+	if err != nil {
+		return nil, err
+	}
+	return &flushableSampleWriter{dataset}, nil
+}
+
+func (scc *splitCmdConfig) MongoSplitOutputWriter(features []feature.Feature) (writableSet, error) {
+	scc.Logf("Opening dataset over MongoDB at url %s to dump split dataset...", scc.splitOutput)
+	msession, err := mgo.Dial(scc.splitOutput)
+	if err != nil {
+		return nil, err
+	}
+	dataset, err := mongodataset.Open(scc.Context(), msession, features)
 	if err != nil {
 		return nil, err
 	}

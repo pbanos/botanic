@@ -1,4 +1,4 @@
-package dbdataset
+package sqldataset
 
 import (
 	"fmt"

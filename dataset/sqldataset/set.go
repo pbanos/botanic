@@ -1,4 +1,4 @@
-package dbdataset
+package sqldataset
 
 import (
 	"context"
@@ -242,7 +242,7 @@ func (ss *dbSet) Write(ctx context.Context, samples []dataset.Sample) (int, erro
 
 func (ss *dbSet) Read(ctx context.Context) (<-chan dataset.Sample, <-chan error) {
 	sampleStream := make(chan dataset.Sample)
-	errStream := make(chan error)
+	errStream := make(chan error, 1)
 	go func() {
 		err := ss.db.IterateOnSamples(
 			ctx,
@@ -256,19 +256,15 @@ func (ss *dbSet) Read(ctx context.Context) (<-chan dataset.Sample, <-chan error)
 					FeatureNamesColumns:   ss.featureNamesColumns}
 				select {
 				case <-ctx.Done():
-					return false, nil
+					return false, ctx.Err()
 				case sampleStream <- s:
 				}
 				return true, nil
 			})
 		if err != nil {
-			go func() {
-				errStream <- err
-				close(errStream)
-			}()
-		} else {
-			close(errStream)
+			errStream <- err
 		}
+		close(errStream)
 		close(sampleStream)
 	}()
 	return sampleStream, errStream
