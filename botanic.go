@@ -2,6 +2,7 @@ package botanic
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/pbanos/botanic/dataset"
@@ -63,6 +64,7 @@ func BranchOut(ctx context.Context, task *queue.Task, t *tree.Tree, ps *PruningS
 	if len(task.AvailableFeatures) == 0 || sEntropy <= ps.MinimumEntropy {
 		return nil, nil
 	}
+	shuffleFeatures(task.AvailableFeatures)
 	var selectedPartition *Partition
 	var featureIndex int
 	for i, f := range task.AvailableFeatures {
@@ -179,4 +181,14 @@ func mergeCtxCancel(ctx1, ctx2 context.Context) (context.Context, context.Cancel
 		}
 	}()
 	return mctx, cancel
+}
+
+func shuffleFeatures(features []feature.Feature) {
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+	for len(features) > 0 {
+		n := len(features)
+		randIndex := r.Intn(n)
+		features[n-1], features[randIndex] = features[randIndex], features[n-1]
+		features = features[:n-1]
+	}
 }
