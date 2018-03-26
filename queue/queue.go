@@ -20,15 +20,15 @@ type Queue interface {
 	// Push takes a task and stores it in the queue or
 	// returns an error. The task will count as pending.
 	Push(context.Context, *Task) error
-	// Pull returns a task and a context that may have
-	// a timeout or allow its cancellation, or an error.
-	// The pulled task will be counted as running from
-	// then on.
+	// Pull returns a task, a context that may have
+	// a timeout or allow its cancellation and a cancel
+	// function for the context or an error. The pulled
+	// task will be counted as running from then on.
 	// If there are no tasks to pull, implementations
-	// should not return an error, but 3 nil values.
-	// In case of cancellation, workers should still
-	// drop the task.
-	Pull(context.Context) (*Task, context.Context, error)
+	// should not return an error, but 4 nil values.
+	// In case of cancellation of the context, workers
+	// should still drop the task.
+	Pull(context.Context) (*Task, context.Context, context.CancelFunc, error)
 	// Drop takes the ID for a tasks an makes it available
 	// for pulling from the Queue again. The dropped task
 	// should be count by implementations as pending
@@ -103,7 +103,7 @@ func (mq *memQueue) Push(ctx context.Context, t *Task) error {
 	})
 }
 
-func (mq *memQueue) Pull(ctx context.Context) (*Task, context.Context, error) {
+func (mq *memQueue) Pull(ctx context.Context) (*Task, context.Context, context.CancelFunc, error) {
 	var task *Task
 	err := mq.withLock(ctx, func(ctx context.Context) error {
 		if len(mq.pendingTasks) == 0 {
@@ -116,12 +116,12 @@ func (mq *memQueue) Pull(ctx context.Context) (*Task, context.Context, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if task == nil {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
-	return task, mq.ctx, nil
+	return task, mq.ctx, func() {}, nil
 }
 
 func (mq *memQueue) Drop(ctx context.Context, id string) error {

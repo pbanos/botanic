@@ -121,7 +121,7 @@ func BranchOut(ctx context.Context, task *queue.Task, t *tree.Tree, ps *PruningS
 // non-nil error.
 func Work(ctx context.Context, t *tree.Tree, q queue.Queue, ps *PruningStrategy, emptyQueueSleep time.Duration) error {
 	for {
-		task, tctx, err := q.Pull(ctx)
+		task, tctx, tcf, err := q.Pull(ctx)
 		if err != nil {
 			return err
 		}
@@ -143,6 +143,7 @@ func Work(ctx context.Context, t *tree.Tree, q queue.Queue, ps *PruningStrategy,
 		mctx, cancel := mergeCtxCancel(tctx, ctx)
 		err = workTask(mctx, task, t, q, ps)
 		cancel()
+		tcf()
 		if err != nil {
 			return err
 		}
