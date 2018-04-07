@@ -27,6 +27,10 @@ elif [ -n "$BOTANIC_MONGODB" ]; then
     TRAINING_DATASET="$BOTANIC_MONGODB"
 fi
 
+if [ -n "$QUEUE_BACKEND" ]; then
+  QUEUE_BACKEND_OPTION="--queue-backend $QUEUE_BACKEND"
+fi
+
 if [ -n "$2" ]; then
     LABEL="$2"
 fi
@@ -41,8 +45,8 @@ fi
 
 echo "botanic dataset split -m \"$METADATA_FILE\" -i \"$DATASET\" -o \"$TRAINING_DATASET\" -s \"$TESTING_DATASET\" -p 20" && \
     botanic dataset split -m "$METADATA_FILE" -i "$DATASET" -o "$TRAINING_DATASET" -s "$TESTING_DATASET" -p 20 && \
-    echo "time botanic tree grow -l \"$LABEL\" -m \"$METADATA_FILE\" -i \"$TRAINING_DATASET\" -o \"$TREE_FILE\"" && \
-    time botanic tree grow -l "$LABEL" -m "$METADATA_FILE" -i "$TRAINING_DATASET" -o "$TREE_FILE" && \
+    echo "time botanic tree grow -l \"$LABEL\" -m \"$METADATA_FILE\" -i \"$TRAINING_DATASET\" -o \"$TREE_FILE\" $QUEUE_BACKEND_OPTION" && \
+    time botanic tree grow -l "$LABEL" -m "$METADATA_FILE" -i "$TRAINING_DATASET" -o "$TREE_FILE" $QUEUE_BACKEND_OPTION && \
     echo "botanic tree test -m \"$METADATA_FILE\" -i \"$TESTING_DATASET\" -t \"$TREE_FILE\"" && \
     botanic tree test -m "$METADATA_FILE" -i "$TESTING_DATASET" -t "$TREE_FILE" && \
     echo Done

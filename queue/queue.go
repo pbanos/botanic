@@ -46,7 +46,7 @@ type Queue interface {
 	// Stops the queue. Implementations should use the
 	// call to free resources and even cancel pulled
 	// contexts.
-	Stop(context.Context) error
+	Stop() error
 }
 
 type memQueue struct {
@@ -156,7 +156,7 @@ func (mq *memQueue) Count(ctx context.Context) (int, int, error) {
 	return pending, running, nil
 }
 
-func (mq *memQueue) Stop(ctx context.Context) error {
+func (mq *memQueue) Stop() error {
 	mq.ctxCancel()
 	return nil
 }

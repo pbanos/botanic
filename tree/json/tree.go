@@ -12,24 +12,25 @@ import (
 )
 
 /*
-WriteJSONTree takes a context.Context, a pointer to a tree.Tree and an
-io.Writer and serializes the given tree as JSON onto the io.Writer.
+WriteJSONTree takes a context.Context, a pointer to a tree.Tree
+a NodeEncodeDecoder and an io.Writer and serializes the given tree
+as JSON onto the io.Writer.
 A tree is serialized as a JSON object with the following fields:
 * "rootID": a string with the ID of the node at the root of the tree
 * "label": a string with the name of the feature the tree predicts
 * "nodes": an array containing the nodes that can be traversed on the tree
-  serialized by MarshalJSONNode.
+  serialized by the given NodeEncodeDecoder.
 An error is returned if the tree cannot be traversed, serialized or written
 onto the io.Writer.
 */
-func WriteJSONTree(ctx context.Context, t *tree.Tree, w io.Writer) error {
+func WriteJSONTree(ctx context.Context, t *tree.Tree, ned NodeEncodeDecoder, w io.Writer) error {
 	err := marshalJSONTreeHeader(ctx, t, w)
 	if err != nil {
 		return err
 	}
 	var i int
 	err = t.Traverse(ctx, false, func(ctx context.Context, n *tree.Node) error {
-		err := writeNode(ctx, i, n, w)
+		err := writeNode(ctx, i, n, ned, w)
 		i++
 		return err
 	})
@@ -51,7 +52,7 @@ A tree is expected to be a JSON object with the following fields:
 An error is returned if the JSON cannot be read from the io.Reader or
 unmarshalled onto the tree.
 */
-func ReadJSONTree(ctx context.Context, t *tree.Tree, features []feature.Feature, r io.Reader) error {
+func ReadJSONTree(ctx context.Context, t *tree.Tree, ned NodeEncodeDecoder, features []feature.Feature, r io.Reader) error {
 	dec := json.NewDecoder(r)
 	jt := &struct {
 		RootID string             `json:"rootID"`
@@ -78,8 +79,7 @@ func ReadJSONTree(ctx context.Context, t *tree.Tree, features []feature.Feature,
 	t.Label = cf
 	t.RootID = jt.RootID
 	for _, jn := range jt.Nodes {
-		n := &tree.Node{}
-		err = UnmarshalJSONNodeWithFeatures(n, *jn, features)
+		n, err := ned.Decode(*jn)
 		if err != nil {
 			return err
 		}
@@ -105,14 +105,14 @@ func marshalJSONTreeHeader(ctx context.Context, t *tree.Tree, w io.Writer) error
 	return err
 }
 
-func writeNode(ctx context.Context, i int, n *tree.Node, w io.Writer) error {
+func writeNode(ctx context.Context, i int, n *tree.Node, ned NodeEncodeDecoder, w io.Writer) error {
 	if i != 0 {
 		_, err := w.Write([]byte(","))
 		if err != nil {
 			return err
 		}
 	}
-	jn, err := MarshalJSONNode(n)
+	jn, err := ned.Encode(n)
 	if err != nil {
 		return err
 	}

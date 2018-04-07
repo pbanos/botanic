@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -11,18 +12,28 @@ import (
 	"github.com/pbanos/botanic"
 	"github.com/pbanos/botanic/dataset"
 	"github.com/pbanos/botanic/dataset/csv"
+	jsond "github.com/pbanos/botanic/dataset/json"
 	"github.com/pbanos/botanic/dataset/mongodataset"
 	"github.com/pbanos/botanic/dataset/sqldataset"
 	"github.com/pbanos/botanic/dataset/sqldataset/pgadapter"
 	"github.com/pbanos/botanic/dataset/sqldataset/sqlite3adapter"
 	"github.com/pbanos/botanic/feature"
+	jsonf "github.com/pbanos/botanic/feature/json"
 	"github.com/pbanos/botanic/feature/yaml"
 	"github.com/pbanos/botanic/queue"
+	jsont "github.com/pbanos/botanic/queue/json"
+	"github.com/pbanos/botanic/queue/redisq"
 	"github.com/pbanos/botanic/tree"
 	"github.com/pbanos/botanic/tree/json"
 	"github.com/spf13/cobra"
 	mgo "gopkg.in/mgo.v2"
+	redis "gopkg.in/redis.v5"
 )
+
+type closerQ struct {
+	queue.Queue
+	closeFn func() error
+}
 
 type growCmdConfig struct {
 	*treeCmdConfig
@@ -34,6 +45,7 @@ type growCmdConfig struct {
 	memoryIntensiveSet bool
 	concurrency        int
 	ctx                context.Context
+	queueBackend       string
 }
 
 func growCmd(treeConfig *treeCmdConfig) *cobra.Command {
@@ -77,13 +89,18 @@ func growCmd(treeConfig *treeCmdConfig) *cobra.Command {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(6)
 			}
-			q := queue.New()
 			ns := tree.NewMemoryNodeStore()
+			q, err := config.Queue(features, ns, trainingSet)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "invalid queue backend: %v\n", err)
+				os.Exit(7)
+			}
+			defer q.Stop()
 			t, err := botanic.Seed(config.Context(), label, features[0:len(features)-1], trainingSet, q, ns)
 			count, err := trainingSet.Count(config.Context())
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "counting training dataset samples: %v\n", err)
-				os.Exit(7)
+				os.Exit(8)
 			}
 			config.Logf("Growing tree from a dataset with %d samples and %d features to predict %s ...", count, len(features)-1, label.Name())
 			ctx, cancel := context.WithCancel(config.Context())
@@ -100,14 +117,14 @@ func growCmd(treeConfig *treeCmdConfig) *cobra.Command {
 			cancel()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "growing the tree: %v\n", err)
-				os.Exit(8)
+				os.Exit(9)
 			}
 			config.Logf("Done")
 			config.Logf("%v", t)
-			err = outputTree(config.Context(), config.output, t)
+			err = outputTree(config.Context(), config.output, features, t)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
-				os.Exit(9)
+				os.Exit(10)
 			}
 		},
 	}
@@ -115,6 +132,7 @@ func growCmd(treeConfig *treeCmdConfig) *cobra.Command {
 	cmd.PersistentFlags().StringVarP(&(config.output), "output", "o", "", "path to a file to which the generated tree will be written in JSON format (defaults to STDOUT)")
 	cmd.PersistentFlags().StringVarP(&(config.label), "label", "l", "", "name of the feature the generated tree should predict (required)")
 	cmd.PersistentFlags().StringVarP(&(config.pruneStrategy), "prune", "p", "default", "pruning strategy to apply, the following are valid: default, minimum-information-gain:[VALUE], none")
+	cmd.PersistentFlags().StringVar(&(config.queueBackend), "queue-backend", "", "URI for a redis key (that will be used as prefix) so that a redis DB is used as backend for a queue for the tasks needed to develop the tree. If not given an in-memory queue will be used")
 	cmd.PersistentFlags().BoolVar(&(config.memoryIntensiveSet), "memory-intensive", false, "force the use of memory-intensive subsetting to decrease time at the cost of increasing memory use")
 	cmd.PersistentFlags().BoolVar(&(config.cpuIntensiveSet), "cpu-intensive", false, "force the use of cpu-intensive subsetting to decrease memory use at the cost of increasing time")
 	cmd.PersistentFlags().IntVar(&(config.concurrency), "concurrency", 1, "limit to concurrent workers on the tree and on DB connections opened at a time (defaults to 1)")
@@ -133,6 +151,9 @@ func (gcc *growCmdConfig) Validate() error {
 	}
 	if gcc.concurrency < 1 {
 		return fmt.Errorf("cannot grow a tree without workers")
+	}
+	if gcc.queueBackend != "" && !strings.HasPrefix(gcc.queueBackend, "redis://") {
+		return fmt.Errorf("unsupported queue backend %q: supported backend must be a redis URI starting with 'redis://' or not provided at all", gcc.queueBackend)
 	}
 	return nil
 }
@@ -214,7 +235,7 @@ func (gcc *growCmdConfig) Context() context.Context {
 	return gcc.ctx
 }
 
-func outputTree(ctx context.Context, outputPath string, tree *tree.Tree) error {
+func outputTree(ctx context.Context, outputPath string, features []feature.Feature, tree *tree.Tree) error {
 	var f *os.File
 	var err error
 	if outputPath == "" {
@@ -226,7 +247,8 @@ func outputTree(ctx context.Context, outputPath string, tree *tree.Tree) error {
 		}
 	}
 	defer f.Close()
-	return json.WriteJSONTree(ctx, tree, f)
+	nencdec := json.NewNodeEncodeDecoder(jsonf.NewCriteriaEncodeDecoder(features), features)
+	return json.WriteJSONTree(ctx, tree, nencdec, f)
 }
 
 func pruningStrategy(ps string) (*botanic.PruningStrategy, error) {
@@ -246,4 +268,42 @@ func pruningStrategy(ps string) (*botanic.PruningStrategy, error) {
 		return &botanic.PruningStrategy{Pruner: botanic.FixedInformationGainPruner(minimum), MinimumEntropy: 0}, nil
 	}
 	return nil, fmt.Errorf("unknown pruning strategy %s", ps)
+}
+
+func (gcc *growCmdConfig) Queue(features []feature.Feature, ns tree.NodeStore, ds dataset.Dataset) (queue.Queue, error) {
+	if gcc.queueBackend == "" {
+		return queue.New(), nil
+	}
+	u, err := url.Parse(gcc.queueBackend)
+	if err != nil {
+		return nil, fmt.Errorf("invalid queue backend URL: %v", err)
+	}
+	passwd, _ := u.User.Password()
+	pathSegments := strings.Split(u.Path, "/")
+	if len(pathSegments) != 3 {
+		return nil, fmt.Errorf("invalid queue backend URL: expected path to a key in a DB as path")
+	}
+	db, err := strconv.Atoi(pathSegments[1])
+	if err != nil {
+		return nil, fmt.Errorf("invalid queue backend URL: parsing DB: %v", err)
+	}
+	keyPrefix := pathSegments[2]
+	rc := redis.NewClient(&redis.Options{
+		Addr:     u.Host,
+		Password: passwd,
+		DB:       db,
+	})
+	ced := jsonf.NewCriteriaEncodeDecoder(features)
+	ded := jsond.New(ds, gcc.dataInput, ced)
+	ted := jsont.New(features, ded, ns)
+	q := redisq.New(keyPrefix, rc, 10*time.Second, 500*time.Millisecond, ted)
+	return &closerQ{q, rc.Close}, nil
+}
+
+func (cq *closerQ) Stop() error {
+	err := cq.Queue.Stop()
+	if err != nil {
+		return err
+	}
+	return cq.closeFn()
 }

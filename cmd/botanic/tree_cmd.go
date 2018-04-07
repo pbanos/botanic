@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/pbanos/botanic/feature"
+	jsonf "github.com/pbanos/botanic/feature/json"
 	"github.com/pbanos/botanic/feature/yaml"
 	"github.com/pbanos/botanic/tree"
 	"github.com/pbanos/botanic/tree/json"
@@ -71,7 +72,8 @@ func loadTree(ctx context.Context, filepath string, features []feature.Feature) 
 	}
 	defer f.Close()
 	t := &tree.Tree{NodeStore: tree.NewMemoryNodeStore()}
-	err = json.ReadJSONTree(ctx, t, features, f)
+	nencdec := json.NewNodeEncodeDecoder(jsonf.NewCriteriaEncodeDecoder(features), features)
+	err = json.ReadJSONTree(ctx, t, nencdec, features, f)
 	if err != nil {
 		err = fmt.Errorf("parsing tree in JSON from %s: %v", filepath, err)
 	}
