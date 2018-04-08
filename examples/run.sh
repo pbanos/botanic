@@ -31,6 +31,10 @@ if [ -n "$QUEUE_BACKEND" ]; then
   QUEUE_BACKEND_OPTION="--queue-backend $QUEUE_BACKEND"
 fi
 
+if [ -n "$NODE_STORE" ]; then
+  NODE_STORE_OPTION="--node-store $NODE_STORE"
+fi
+
 if [ -n "$2" ]; then
     LABEL="$2"
 fi
@@ -45,8 +49,8 @@ fi
 
 echo "botanic dataset split -m \"$METADATA_FILE\" -i \"$DATASET\" -o \"$TRAINING_DATASET\" -s \"$TESTING_DATASET\" -p 20" && \
     botanic dataset split -m "$METADATA_FILE" -i "$DATASET" -o "$TRAINING_DATASET" -s "$TESTING_DATASET" -p 20 && \
-    echo "time botanic tree grow -l \"$LABEL\" -m \"$METADATA_FILE\" -i \"$TRAINING_DATASET\" -o \"$TREE_FILE\" $QUEUE_BACKEND_OPTION" && \
-    time botanic tree grow -l "$LABEL" -m "$METADATA_FILE" -i "$TRAINING_DATASET" -o "$TREE_FILE" $QUEUE_BACKEND_OPTION && \
+    echo "time botanic tree grow -l \"$LABEL\" -m \"$METADATA_FILE\" -i \"$TRAINING_DATASET\" -o \"$TREE_FILE\" $QUEUE_BACKEND_OPTION $NODE_STORE_OPTION" && \
+    time botanic tree grow -l "$LABEL" -m "$METADATA_FILE" -i "$TRAINING_DATASET" -o "$TREE_FILE" $QUEUE_BACKEND_OPTION $NODE_STORE_OPTION && \
     echo "botanic tree test -m \"$METADATA_FILE\" -i \"$TESTING_DATASET\" -t \"$TREE_FILE\"" && \
     botanic tree test -m "$METADATA_FILE" -i "$TESTING_DATASET" -t "$TREE_FILE" && \
     echo Done

@@ -240,6 +240,7 @@ Flags:
   -i, --input string           path to an input CSV (.csv) or SQLite3 (.db) file, or a PostgreSQL or MongoDB connection URL with data to use to grow the tree (defaults to STDIN, interpreted as CSV)
   -l, --label string           name of the feature the generated tree should predict (required)
       --memory-intensive       force the use of memory-intensive subsetting to decrease time at the cost of increasing memory use
+      --node-store string      URI for a redis key (that will be used as prefix) so that a redis DB is used as backend for a temporary store for the nodes of the tree. If not given an in-memory node store will be used
   -o, --output string          path to a file to which the generated tree will be written in JSON format (defaults to STDOUT)
   -p, --prune string           pruning strategy to apply, the following are valid: default, minimum-information-gain:[VALUE], none (default "default")
       --queue-backend string   URI for a redis key (that will be used as prefix) so that a redis DB is used as backend for a queue for the tasks needed to develop the tree. If not given an in-memory queue will be used
@@ -261,7 +262,8 @@ The following optional flags can also be useful:
   - `default`: the default one
   - `minimum-information-gain`: this strategy imposes a minimum value for the information gain obtained from the subbranching. This value can be specified appending :VALUE to the strategy, for example: `--prune minimum-information-gain:0.05`
   - `none`: this strategy disables pruning
-- `--queue-backend` allows configuring the command to use a redis DB as backend. The value for this option must be a valid `redis://` URI to a key in a redis DB. The key will actually be used only as prefix for queue keys on the DB. For example, the value `redis://:mypasswd@redis.example.net:6379/1/my-queue` would configure the use of the `1` redis DB on `redis.example.net:6379`, authenticated by the password `mypasswd` and using `my-queue` as key prefix. If this option is not specified, an in-memory implementation is used instead.
+- `--queue-backend` allows configuring the command to use a redis DB as backend for tasks. The value for this option must be a valid `redis://` URI to a key in a redis DB. The key will actually be used only as prefix for queue keys on the DB. For example, the value `redis://:mypasswd@redis.example.net:6379/1/my-queue` would configure the use of the `1` redis DB on `redis.example.net:6379`, authenticated by the password `mypasswd` and using `my-queue` as key prefix. If this option is not specified, an in-memory implementation is used instead.
+- `--node-store` allows configuring the command to use a redis DB as backend for nodes.  The value for this option must be a valid `redis://` URI to a key in a redis DB. The key will actually be used only as prefix for keys under which node data will be stored on the DB. For example, the value `redis://:mypasswd@redis.example.net:6379/1/my-nodes` would configure the use of the `1` redis DB on `redis.example.net:6379`, authenticated by the password `mypasswd` and using `my-nodes` as key prefix. If this option is not specified, an in-memory implementation is used instead.
 
 If the input or training dataset is in a CSV file, the following optional flags are available:
 - `--cpu-intensive` selects a dataset implementation that will keep in memory a single copy of the dataset's samples, at the cost of a longer time of processing.
