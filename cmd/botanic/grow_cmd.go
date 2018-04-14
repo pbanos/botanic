@@ -53,6 +53,7 @@ type growCmdConfig struct {
 	ctx                context.Context
 	queueBackend       string
 	nodeStore          string
+	worker             bool
 }
 
 func growCmd(treeConfig *treeCmdConfig) *cobra.Command {
@@ -101,17 +102,27 @@ func growCmd(treeConfig *treeCmdConfig) *cobra.Command {
 				fmt.Fprintf(os.Stderr, "invalid node store: %v\n", err)
 				os.Exit(7)
 			}
+			defer ns.Close(config.Context())
 			q, err := config.Queue(features, ns, trainingSet)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "invalid queue backend: %v\n", err)
 				os.Exit(8)
 			}
 			defer q.Stop()
-			t, err := botanic.Seed(config.Context(), label, features[0:len(features)-1], trainingSet, q, ns)
+			var t *tree.Tree
+			if config.worker {
+				t = &tree.Tree{NodeStore: ns, RootID: "", Label: label}
+			} else {
+				t, err = botanic.Seed(config.Context(), label, features[0:len(features)-1], trainingSet, q, ns)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "starting growth of tree: %v\n", err)
+					os.Exit(9)
+				}
+			}
 			count, err := trainingSet.Count(config.Context())
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "counting training dataset samples: %v\n", err)
-				os.Exit(9)
+				os.Exit(10)
 			}
 			config.Logf("Growing tree from a dataset with %d samples and %d features to predict %s ...", count, len(features)-1, label.Name())
 			ctx, cancel := context.WithCancel(config.Context())
@@ -124,18 +135,24 @@ func growCmd(treeConfig *treeCmdConfig) *cobra.Command {
 					}
 				}(i)
 			}
+			if config.verbose {
+				go config.reportQueueStats(ctx, q, time.Minute)
+			}
 			err = queue.WaitFor(ctx, q)
 			cancel()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "growing the tree: %v\n", err)
-				os.Exit(10)
+				os.Exit(11)
 			}
 			config.Logf("Done")
+			if config.worker {
+				return
+			}
 			config.Logf("%v", t)
 			err = outputTree(config.Context(), config.output, features, t)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
-				os.Exit(11)
+				os.Exit(12)
 			}
 		},
 	}
@@ -147,6 +164,7 @@ func growCmd(treeConfig *treeCmdConfig) *cobra.Command {
 	cmd.PersistentFlags().StringVar(&(config.nodeStore), "node-store", "", "URI for a redis key (that will be used as prefix) so that a redis DB is used as backend for a temporary store for the nodes of the tree. If not given an in-memory node store will be used")
 	cmd.PersistentFlags().BoolVar(&(config.memoryIntensiveSet), "memory-intensive", false, "force the use of memory-intensive subsetting to decrease time at the cost of increasing memory use")
 	cmd.PersistentFlags().BoolVar(&(config.cpuIntensiveSet), "cpu-intensive", false, "force the use of cpu-intensive subsetting to decrease memory use at the cost of increasing time")
+	cmd.PersistentFlags().BoolVar(&(config.worker), "contribute", false, "rather than start growing a tree, contribute to an ongoing tree growth by working with an external queue and node store. Requires setting --queue-backend and --node-store")
 	cmd.PersistentFlags().IntVar(&(config.concurrency), "concurrency", 1, "limit to concurrent workers on the tree and on DB connections opened at a time (defaults to 1)")
 	return cmd
 }
@@ -161,14 +179,26 @@ func (gcc *growCmdConfig) Validate() error {
 	if gcc.cpuIntensiveSet && gcc.memoryIntensiveSet {
 		return fmt.Errorf("cannot set both memory-intensive and cpu-intensive flags at the same time")
 	}
-	if gcc.concurrency < 1 {
-		return fmt.Errorf("cannot grow a tree without workers")
+	if gcc.concurrency < 0 {
+		return fmt.Errorf("number of workers needs to be greater or equal than 0")
+	}
+	if gcc.concurrency == 0 && gcc.worker {
+		return fmt.Errorf("cannot contribute to an ongoing tree growth with 0 workers")
+	}
+	if gcc.concurrency == 0 && (gcc.nodeStore == "" || gcc.queueBackend == "") {
+		return fmt.Errorf("tree will never be fully grown with 0 concurrent workers and without external node store and queue backend")
 	}
 	if gcc.queueBackend != "" && !strings.HasPrefix(gcc.queueBackend, "redis://") {
 		return fmt.Errorf("unsupported queue backend %q: supported backend must be a redis URI starting with 'redis://' or not provided at all", gcc.queueBackend)
 	}
 	if gcc.nodeStore != "" && !strings.HasPrefix(gcc.nodeStore, "redis://") {
 		return fmt.Errorf("unsupported node store %q: supported backend must be a redis URI starting with 'redis://' or not provided at all", gcc.nodeStore)
+	}
+	if gcc.worker && gcc.queueBackend == "" {
+		return fmt.Errorf("cannot contribute to an ongoing tree growth without an external queue backend")
+	}
+	if gcc.worker && gcc.nodeStore == "" {
+		return fmt.Errorf("cannot contribute to an ongoing tree growth without an external node store")
 	}
 	return nil
 }
@@ -296,7 +326,7 @@ func (gcc *growCmdConfig) Queue(features []feature.Feature, ns tree.NodeStore, d
 	ced := jsonf.NewCriteriaEncodeDecoder(features)
 	ded := jsond.New(ds, gcc.dataInput, ced)
 	ted := jsonq.New(features, ded, ns)
-	q := redisq.New(keyPrefix, rc, 10*time.Second, 500*time.Millisecond, ted)
+	q := redisq.New(keyPrefix, rc, 10*time.Second, time.Second, ted)
 	return &closerQ{q, rc.Close}, nil
 }
 
@@ -347,4 +377,20 @@ func (gcc *growCmdConfig) NodeStore(features []feature.Feature) (tree.NodeStore,
 	}
 	nencdec := jsont.NewNodeEncodeDecoder(jsonf.NewCriteriaEncodeDecoder(features), features)
 	return &closerNS{redisstore.New(rc, keyPrefix, nencdec), rc.Close}, nil
+}
+
+func (gcc *growCmdConfig) reportQueueStats(ctx context.Context, q queue.Queue, interval time.Duration) {
+	for {
+		r, p, err := q.Count(ctx)
+		if err != nil {
+			gcc.Logf("cannot get queue stats: %v", err)
+		} else {
+			gcc.Logf("Queue stats: %d pending, %d running", r, p)
+		}
+		select {
+		case <-time.After(interval):
+		case <-ctx.Done():
+			return
+		}
+	}
 }
