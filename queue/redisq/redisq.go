@@ -299,7 +299,8 @@ func (rq *redisQ) withLockFor(ctx context.Context, taskKeyPrefix string, additio
 	if !ok {
 		if additionalAttempts > 0 {
 			cf()
-			time.Sleep(time.Duration(rand.Int63n(int64(failToLockSleep))))
+			d, _ := rq.rc.TTL(tLockKey).Result()
+			time.Sleep(d + time.Duration(rand.Int63n(int64(failToLockSleep)*int64(additionalAttempts))))
 			return rq.withLockFor(ctx, taskKeyPrefix, additionalAttempts-1, f)
 		}
 		return fmt.Errorf("could not acquire lock: already taken")

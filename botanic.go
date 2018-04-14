@@ -141,12 +141,9 @@ func Work(ctx context.Context, t *tree.Tree, q queue.Queue, ps *PruningStrategy,
 			continue
 		}
 		mctx, cancel := mergeCtxCancel(tctx, ctx)
-		err = workTask(mctx, task, t, q, ps)
+		workTask(mctx, task, t, q, ps)
 		cancel()
 		tcf()
-		if err != nil {
-			return err
-		}
 		err = ctx.Err()
 		if err != nil {
 			return err
