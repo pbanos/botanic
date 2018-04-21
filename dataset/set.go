@@ -95,7 +95,7 @@ func (s *cpuIntensiveSubsettingDataset) Count(ctx context.Context) (int, error) 
 		return *s.count, nil
 	}
 	var length int
-	s.iterateOnDataset(func(_ Sample) (bool, error) {
+	s.iterateOnDataset(ctx, func(_ Sample) (bool, error) {
 		length++
 		return true, nil
 	})
@@ -111,7 +111,7 @@ func (s *memoryIntensiveSubsettingDataset) Entropy(ctx context.Context, f featur
 	featureValueCounts := make(map[string]float64)
 	count := 0.0
 	for _, sample := range s.samples {
-		v, err := sample.ValueFor(f)
+		v, err := sample.ValueFor(ctx, f)
 		if err != nil {
 			return result, err
 		}
@@ -139,8 +139,8 @@ func (s *cpuIntensiveSubsettingDataset) Entropy(ctx context.Context, f feature.F
 	var result float64
 	featureValueCounts := make(map[string]float64)
 	count := 0.0
-	err := s.iterateOnDataset(func(sample Sample) (bool, error) {
-		v, err := sample.ValueFor(f)
+	err := s.iterateOnDataset(ctx, func(sample Sample) (bool, error) {
+		v, err := sample.ValueFor(ctx, f)
 		if err != nil {
 			return false, err
 		}
@@ -169,7 +169,7 @@ func (s *memoryIntensiveSubsettingDataset) FeatureValues(ctx context.Context, f 
 	result := []interface{}{}
 	encountered := make(map[string]bool)
 	for _, sample := range s.samples {
-		v, err := sample.ValueFor(f)
+		v, err := sample.ValueFor(ctx, f)
 		if err != nil {
 			return nil, err
 		}
@@ -185,8 +185,8 @@ func (s *memoryIntensiveSubsettingDataset) FeatureValues(ctx context.Context, f 
 func (s *cpuIntensiveSubsettingDataset) FeatureValues(ctx context.Context, f feature.Feature) ([]interface{}, error) {
 	result := []interface{}{}
 	encountered := make(map[string]bool)
-	err := s.iterateOnDataset(func(sample Sample) (bool, error) {
-		v, err := sample.ValueFor(f)
+	err := s.iterateOnDataset(ctx, func(sample Sample) (bool, error) {
+		v, err := sample.ValueFor(ctx, f)
 		if err != nil {
 			return false, err
 		}
@@ -206,7 +206,7 @@ func (s *cpuIntensiveSubsettingDataset) FeatureValues(ctx context.Context, f fea
 func (s *memoryIntensiveSubsettingDataset) SubsetWith(ctx context.Context, fc feature.Criterion) (Dataset, error) {
 	var samples []Sample
 	for _, sample := range s.samples {
-		ok, err := fc.SatisfiedBy(sample)
+		ok, err := fc.SatisfiedBy(ctx, sample)
 		if err != nil {
 			return nil, err
 		}
@@ -228,7 +228,7 @@ func (s *memoryIntensiveSubsettingDataset) Samples(ctx context.Context) ([]Sampl
 
 func (s *cpuIntensiveSubsettingDataset) Samples(ctx context.Context) ([]Sample, error) {
 	var samples []Sample
-	err := s.iterateOnDataset(func(sample Sample) (bool, error) {
+	err := s.iterateOnDataset(ctx, func(sample Sample) (bool, error) {
 		samples = append(samples, sample)
 		return true, nil
 	})
@@ -241,7 +241,7 @@ func (s *cpuIntensiveSubsettingDataset) Samples(ctx context.Context) ([]Sample, 
 func (s *memoryIntensiveSubsettingDataset) CountFeatureValues(ctx context.Context, f feature.Feature) (map[string]int, error) {
 	result := make(map[string]int)
 	for _, sample := range s.samples {
-		v, err := sample.ValueFor(f)
+		v, err := sample.ValueFor(ctx, f)
 		if err != nil {
 			return nil, err
 		}
@@ -253,8 +253,8 @@ func (s *memoryIntensiveSubsettingDataset) CountFeatureValues(ctx context.Contex
 
 func (s *cpuIntensiveSubsettingDataset) CountFeatureValues(ctx context.Context, f feature.Feature) (map[string]int, error) {
 	result := make(map[string]int)
-	err := s.iterateOnDataset(func(sample Sample) (bool, error) {
-		v, err := sample.ValueFor(f)
+	err := s.iterateOnDataset(ctx, func(sample Sample) (bool, error) {
+		v, err := sample.ValueFor(ctx, f)
 		if err != nil {
 			return false, err
 		}
@@ -276,11 +276,11 @@ func (s *cpuIntensiveSubsettingDataset) Criteria(ctx context.Context) ([]feature
 	return s.criteria, nil
 }
 
-func (s *cpuIntensiveSubsettingDataset) iterateOnDataset(lambda func(Sample) (bool, error)) error {
+func (s *cpuIntensiveSubsettingDataset) iterateOnDataset(ctx context.Context, lambda func(Sample) (bool, error)) error {
 	for _, sample := range s.samples {
 		skip := false
 		for _, criterion := range s.criteria {
-			ok, err := criterion.SatisfiedBy(sample)
+			ok, err := criterion.SatisfiedBy(ctx, sample)
 			if err != nil {
 				return err
 			}

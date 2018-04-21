@@ -231,7 +231,7 @@ func (ss *dbSet) Write(ctx context.Context, samples []dataset.Sample) (int, erro
 	}
 	rawSamples := make([]map[string]interface{}, 0, len(samples))
 	for _, s := range samples {
-		rs, err := ss.newRawSample(s)
+		rs, err := ss.newRawSample(ctx, s)
 		if err != nil {
 			return 0, err
 		}
@@ -338,10 +338,10 @@ func (ss *dbSet) init(ctx context.Context) error {
 	return nil
 }
 
-func (ss *dbSet) newRawSample(s dataset.Sample) (map[string]interface{}, error) {
+func (ss *dbSet) newRawSample(ctx context.Context, s dataset.Sample) (map[string]interface{}, error) {
 	rs := make(map[string]interface{})
 	for _, f := range ss.features {
-		v, err := s.ValueFor(f)
+		v, err := s.ValueFor(ctx, f)
 		if err != nil {
 			return nil, err
 		}

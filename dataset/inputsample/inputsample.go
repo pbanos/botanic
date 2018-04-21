@@ -6,6 +6,7 @@ package inputsample
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -68,7 +69,7 @@ func New(r io.Reader, features []feature.Feature, featureValueRequester FeatureV
 	return &readSample{make(map[string]interface{}), undefinedValue, scanner, featureValueRequester, features}
 }
 
-func (rs *readSample) ValueFor(f feature.Feature) (interface{}, error) {
+func (rs *readSample) ValueFor(_ context.Context, f feature.Feature) (interface{}, error) {
 	value, ok := rs.obtainedValues[f.Name()]
 	if ok {
 		return value, nil

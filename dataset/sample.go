@@ -1,6 +1,7 @@
 package dataset
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pbanos/botanic/feature"
@@ -13,7 +14,7 @@ Its ValueFor method returns the value of the sample corresponding to the feature
 passed as parameter.
 */
 type Sample interface {
-	ValueFor(feature.Feature) (interface{}, error)
+	ValueFor(context.Context, feature.Feature) (interface{}, error)
 }
 
 type sample struct {
@@ -28,7 +29,7 @@ func NewSample(featureValues map[string]interface{}) Sample {
 	return &sample{featureValues}
 }
 
-func (s *sample) ValueFor(feature feature.Feature) (interface{}, error) {
+func (s *sample) ValueFor(_ context.Context, feature feature.Feature) (interface{}, error) {
 	return s.featureValues[feature.Name()], nil
 }
 

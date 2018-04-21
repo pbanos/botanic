@@ -138,7 +138,7 @@ func (mds *mongodataset) Write(ctx context.Context, samples []dataset.Sample) (i
 	for _, s := range samples {
 		doc := make(bson.M)
 		for _, f := range mds.features {
-			value, err := s.ValueFor(f)
+			value, err := s.ValueFor(ctx, f)
 			if err != nil {
 				return 0, err
 			}

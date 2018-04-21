@@ -259,7 +259,7 @@ func (cw *csvWriter) Write(ctx context.Context, samples []dataset.Sample) (int, 
 	n := 0
 	var err error
 	for ; n < len(samples); n++ {
-		err = cw.WriteSample(samples[n])
+		err = cw.WriteSample(ctx, samples[n])
 		if err != nil {
 			return n, err
 		}
@@ -267,10 +267,10 @@ func (cw *csvWriter) Write(ctx context.Context, samples []dataset.Sample) (int, 
 	return len(samples), nil
 }
 
-func (cw *csvWriter) WriteSample(sample dataset.Sample) error {
+func (cw *csvWriter) WriteSample(ctx context.Context, sample dataset.Sample) error {
 	record := make([]string, len(cw.features))
 	for j, f := range cw.features {
-		v, err := sample.ValueFor(f)
+		v, err := sample.ValueFor(ctx, f)
 		if err != nil {
 			return err
 		}

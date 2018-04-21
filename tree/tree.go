@@ -53,7 +53,7 @@ func (t *Tree) Predict(ctx context.Context, s feature.Sample) (*Prediction, erro
 				return nil, fmt.Errorf("predicting sample: node %v not found", nID)
 			}
 			if subnode.FeatureCriterion != nil {
-				ok, err := subnode.FeatureCriterion.SatisfiedBy(s)
+				ok, err := subnode.FeatureCriterion.SatisfiedBy(ctx, s)
 				if err != nil {
 					return nil, err
 				}
@@ -107,7 +107,7 @@ func (t *Tree) Test(ctx context.Context, s dataset.Dataset) (float64, int, error
 			errCount++
 		} else {
 			pV, _ := p.PredictedValue()
-			v, err := sample.ValueFor(t.Label)
+			v, err := sample.ValueFor(ctx, t.Label)
 			if err != nil {
 				return 0.0, 0, err
 			}

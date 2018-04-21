@@ -1,6 +1,7 @@
 package sqldataset
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pbanos/botanic/feature"
@@ -47,7 +48,7 @@ whereas for discrete features this value is used as key on the
 DiscreteFeaturesValue dictionary to obtain the string
 representation for it.
 */
-func (s *Sample) ValueFor(f feature.Feature) (interface{}, error) {
+func (s *Sample) ValueFor(_ context.Context, f feature.Feature) (interface{}, error) {
 	c, ok := s.FeatureNamesColumns[f.Name()]
 	if !ok {
 		return nil, nil

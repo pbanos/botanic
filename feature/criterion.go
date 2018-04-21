@@ -1,6 +1,7 @@
 package feature
 
 import (
+	"context"
 	"fmt"
 	"math"
 )
@@ -15,7 +16,7 @@ Its Feature method returns the feature on which the criterion is applied.
 */
 type Criterion interface {
 	Feature() Feature
-	SatisfiedBy(sample Sample) (bool, error)
+	SatisfiedBy(ctx context.Context, sample Sample) (bool, error)
 }
 
 /*
@@ -25,7 +26,7 @@ Its ValueFor method returns the value corresponding to the feature
 passed as parameter.
 */
 type Sample interface {
-	ValueFor(Feature) (interface{}, error)
+	ValueFor(context.Context, Feature) (interface{}, error)
 }
 
 /*
@@ -116,8 +117,8 @@ sample satisfies the criterion. Specifically, it returns false if the sample doe
 not define a value for the feature, true if the value, being a float64, is in the
 range defined by the criterion; and false otherwise.
 */
-func (cfc *continuousCriterion) SatisfiedBy(sample Sample) (bool, error) {
-	val, err := sample.ValueFor(cfc.feature)
+func (cfc *continuousCriterion) SatisfiedBy(ctx context.Context, sample Sample) (bool, error) {
+	val, err := sample.ValueFor(ctx, cfc.feature)
 	if err != nil {
 		return false, err
 	}
@@ -158,8 +159,8 @@ sample satisfies the criterion. Specifically, it returns false if the sample doe
 not define a value for the feature, true if the value, being a string, equals the
 value on the criterion; and false otherwise.
 */
-func (dfc *discreteCriterion) SatisfiedBy(sample Sample) (bool, error) {
-	val, err := sample.ValueFor(dfc.feature)
+func (dfc *discreteCriterion) SatisfiedBy(ctx context.Context, sample Sample) (bool, error) {
+	val, err := sample.ValueFor(ctx, dfc.feature)
 	if err != nil {
 		return false, err
 	}
@@ -185,7 +186,7 @@ func (u *undefinedCriterion) Feature() Feature {
 	return u.feature
 }
 
-func (u *undefinedCriterion) SatisfiedBy(sample Sample) (bool, error) {
+func (u *undefinedCriterion) SatisfiedBy(context.Context, Sample) (bool, error) {
 	return true, nil
 }
 
