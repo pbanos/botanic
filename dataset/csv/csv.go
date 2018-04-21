@@ -212,14 +212,12 @@ func WriteCSVSet(ctx context.Context, writer io.Writer, s dataset.Dataset, featu
 
 func parseFeaturesFromCSVHeader(header []string, features map[string]feature.Feature) ([]feature.Feature, error) {
 	featureOrder := []feature.Feature{}
-	for i, name := range header {
+	for _, name := range header {
 		f, ok := features[name]
 		if ok {
 			featureOrder = append(featureOrder, f)
 		} else {
-			if i != len(header)-1 {
-				return nil, fmt.Errorf("parsing header: reference to unknown feature %s", name)
-			}
+			featureOrder = append(featureOrder, nil)
 		}
 	}
 	return featureOrder, nil
@@ -228,6 +226,9 @@ func parseFeaturesFromCSVHeader(header []string, features map[string]feature.Fea
 func parseSampleFromCSVRow(row []string, featureOrder []feature.Feature) (dataset.Sample, error) {
 	featureValues := make(map[string]interface{})
 	for i, f := range featureOrder {
+		if f == nil {
+			continue
+		}
 		v := row[i]
 		var value interface{}
 		var err error
